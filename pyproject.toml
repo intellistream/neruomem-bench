@@ -1,0 +1,46 @@
+# ============================================================================
+# neuromem-bench — Benchmark suite for NeuroMem
+# Not published to PyPI. Use: pip install -e .
+# ============================================================================
+
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neuromem-bench"
+version = "0.1.0"
+description = "Benchmark suite for NeuroMem memory systems"
+requires-python = ">=3.11"
+
+dependencies = [
+    # NeuroMem core (provides NeuromemServiceFactory + storage backends)
+    "isage-neuromem[full]",
+
+    # Sage runtime (provides sage.foundation, sage.runtime for pipelines)
+    "isage",
+
+    # LLM & Embedding API client
+    "openai",
+
+    # Config loading
+    "pyyaml",
+
+    # LSH data structure (MinHash + MinHashLSH)
+    "datasketch",
+
+    # Used in benchmark analysis scripts
+    "regex",
+
+    # Test runner
+    "pytest>=7.0.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+include = ["benchmarks*"]
+
+[tool.setuptools.package-data]
+"benchmarks.experiment.config" = ["*.yaml"]

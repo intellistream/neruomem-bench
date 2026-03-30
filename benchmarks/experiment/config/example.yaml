@@ -1,0 +1,57 @@
+# ============================================================================
+# NeuroMem Benchmark - Example Configuration
+# ============================================================================
+# 此配置演示了最基本的 pipeline 配置方式。
+# 所有 operator 均为 "none"（直通模式），适合作为开发模板。
+
+# 运行时参数
+runtime:
+  dataset: "your_dataset"       # 数据集名称（需与 DataLoaderFactory 注册的名称一致）
+  # task_id: "sample-01"        # 任务ID，也可通过 --task_id 命令行参数覆盖
+  test_segments: 10             # 测试分段数，将总问题数均匀分为 N 段触发测试
+  memory_name: "baseline"       # 记忆体名称标识（用于输出目录）
+
+  # LLM 生成器配置（用于评估阶段生成答案）
+  api_key: "your-api-key"
+  base_url: "http://localhost:8000/v1"
+  model_name: "your-model-name"
+  max_tokens: 512
+  temperature: 0.7
+  seed: 42
+
+  # Embedding 服务配置（可选，如果不需要 embedding 检索可注释掉）
+  # embedding_base_url: "http://localhost:8091/v1"
+  # embedding_model: "BAAI/bge-m3"
+
+  # 问答 prompt 模板
+  prompt_template: |
+    Based on the above context, answer the following question concisely
+    using exact words from the context whenever possible.
+    If the information is not mentioned in the conversation,
+    respond with "Not mentioned in the conversation".
+
+# 记忆服务配置
+services:
+  # 服务类型: "<category>.<implementation>"
+  # 示例: "partitional.fifo_queue", "partitional.short_term_memory"
+  services_type: "partitional.fifo_queue"
+
+  # 具体服务参数（key 需与 services_type 的实现名一致）
+  fifo_queue:
+    max_capacity: 1000          # 最大容量
+    vector_dim: 1024            # 向量维度
+    retrieval_mode: "recent_first"
+    retrieval_top_k: 10
+
+# Operator 配置
+operators:
+  pre_insert:
+    action: "none"              # 插入前处理: none（直通）
+  post_insert:
+    action: "none"              # 插入后处理: none（直通）
+  pre_retrieval:
+    action: "none"              # 检索前处理: none / embedding
+  post_retrieval:
+    action: "none"              # 检索后处理: none（自动格式化对话历史）
+    conversation_format_prompt: |
+      The following is some history information.
