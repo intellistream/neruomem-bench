@@ -11,7 +11,7 @@ fi
 
 validate_install() {
     local env_name="${SETUP_ENV_NAME:-${ENV_NAME:-neuromem}}"
-    local bench_root="${BENCH_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+    local bench_root="${BENCH_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
     local script="$bench_root/test/installation_validation/sage_pipeline.py"
     local log_file="${INSTALL_LOG:-$bench_root/.sage/installation/validate_$(date +%Y%m%d_%H%M%S).log}"
 

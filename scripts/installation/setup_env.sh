@@ -11,7 +11,7 @@ fi
 
 setup_env() {
     local env_name="${ENV_NAME:-neuromem}"
-    local bench_root="${BENCH_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+    local bench_root="${BENCH_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
     local log_dir="$bench_root/.sage/installation"
     local log_file="$log_dir/install_$(date +%Y%m%d_%H%M%S).log"
 

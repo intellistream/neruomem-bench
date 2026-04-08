@@ -4,7 +4,7 @@
 set -euo pipefail
 
 BENCH_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPTS_DIR="$BENCH_ROOT/scripts"
+SCRIPTS_DIR="$BENCH_ROOT/scripts/installation"
 export BENCH_ROOT
 
 # ============================================================
