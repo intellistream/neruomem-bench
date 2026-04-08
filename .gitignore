@@ -12,7 +12,7 @@ dist/
 build/
 
 # Environments
-.env
+# .env is intentionally tracked (contains only non-secret config, token is commented out)
 .venv
 env/
 venv/
