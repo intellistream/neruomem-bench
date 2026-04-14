@@ -168,7 +168,7 @@ class SimplePipelineCaller(MapFunction):
                         "completed": True,
                         "stage_timings": {
                             "insert": {
-                                "add_ms": remaining,
+                                "memory_insert_ms": remaining,
                             },
                             "test": [],
                         },
@@ -265,8 +265,8 @@ class SimplePipelineCaller(MapFunction):
             "answers": test_answers,
             "completed": is_last_packet,
             "stage_timings": {
-                "insert": {"add_ms": incremental_add},
-                "test": {"search_ms": avg_search_ms},
+                "insert": {"memory_insert_ms": incremental_add},
+                "test": {"memory_retrieval_ms": avg_search_ms},
                 "memory_stats": memory_stats,
             },
         }

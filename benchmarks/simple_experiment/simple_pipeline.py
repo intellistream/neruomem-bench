@@ -23,7 +23,6 @@ from sage.foundation import CustomLogger
 from sage.runtime import LocalEnvironment
 
 from benchmarks.experiment.libs.memory_evaluation import MemoryEvaluation
-from benchmarks.experiment.libs.memory_sink import MemorySink
 from benchmarks.experiment.libs.memory_source import MemorySource
 from benchmarks.experiment.pipeline_service import (
     PipelineBridge,
@@ -35,6 +34,7 @@ from benchmarks.experiment.utils import RuntimeConfig, parse_args, process_logge
 from benchmarks.simple_experiment.adapters.simple_adapter_factory import SimpleAdapterFactory
 from benchmarks.simple_experiment.libs.simple_memory_add import SimpleMemoryAdd
 from benchmarks.simple_experiment.libs.simple_memory_search import SimpleMemorySearch
+from benchmarks.simple_experiment.libs.simple_memory_sink import SimpleMemorySink
 from benchmarks.simple_experiment.libs.simple_pipeline_caller import SimplePipelineCaller
 
 # 复用 experiment 模块的多 pipeline 提交工具（不重复实现）
@@ -109,7 +109,7 @@ def main() -> None:
     (
         env.from_batch(MemorySource, config)
         .map(SimplePipelineCaller, config)
-        .sink(MemorySink, config)
+        .sink(SimpleMemorySink, config)
     )
 
     # ── 启动（流式子 pipeline 在后台，批式主 pipeline 在前台）─────────────

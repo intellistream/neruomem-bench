@@ -29,7 +29,7 @@
 runtime:
   dataset: "locomo"              # 数据集名称，需提前注册到 DataLoaderFactory
   # task_id: "conv-26"           # 任务 ID，也可通过 --task_id 命令行参数传入
-  test_segments: 5               # 将总问题数分成 N 段依次触发测试
+  test_segments: 3               # 将总问题数分成 N 段依次触发测试
   memory_name: "mem0"            # 输出目录标识（.sage/benchmarks/.../mem0/）
 
   # LLM 服务（用于问答评估阶段）

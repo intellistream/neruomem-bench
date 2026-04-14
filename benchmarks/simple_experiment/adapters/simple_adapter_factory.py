@@ -117,4 +117,4 @@ class SimpleAdapterFactory:
             def get_stats(self) -> dict[str, Any]:
                 return self._require().get_stats()
 
-        return ServiceFactory(service_class=_SimpleAdapterProxy)
+        return ServiceFactory(service_name=adapter_name, service_class=_SimpleAdapterProxy)

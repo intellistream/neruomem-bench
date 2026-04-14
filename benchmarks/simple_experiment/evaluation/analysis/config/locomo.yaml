@@ -1,0 +1,57 @@
+# ============================================================================
+# Simple Experiment — LoCoMo 评估配置
+# ============================================================================
+#
+# 针对 simple_experiment（黑盒第三方记忆体）的评估配置
+# 数据来自 .sage/benchmarks/simple_benchmark_memory/locomo/{adapter_name}/
+#
+# 使用方式:
+#   # 分析所有适配器
+#   python -m benchmarks.simple_experiment.evaluation.analysis.round_analyzer \
+#       --config locomo --all
+#
+#   # 分析指定适配器
+#   python -m benchmarks.simple_experiment.evaluation.analysis.round_analyzer \
+#       --config locomo --path mem0
+# ============================================================================
+
+dataset:
+  name: "locomo"
+  description: "LoCoMo Long-form Conversation Memory Dataset (Simple Experiment)"
+
+# 数据路径配置
+paths:
+  base_dir: ".sage/benchmarks/simple_benchmark_memory/locomo"
+  output_dir: ".sage/benchmarks/simple_benchmark_memory/locomo/output/round_analysis"
+
+# 评估器配置
+evaluator:
+  # 使用 LoCoMo 专用评估器
+  name: "locomo"
+
+# Category 配置（simple_experiment 使用字符串类别名）
+categories:
+  labels:
+    "factual": "Factual"
+    "temporal": "Temporal"
+    "spatial": "Spatial"
+    "causal": "Causal"
+    "opinion": "Opinion"
+
+# 输出配置
+output:
+  formats:
+    - png
+    - csv
+    - md
+
+  charts:
+    comparison: true
+    single_strategy: true
+    dpi: 300
+    figsize: [12, 7]
+
+report:
+  include_summary: true
+  include_detailed: true
+  language: "en"
