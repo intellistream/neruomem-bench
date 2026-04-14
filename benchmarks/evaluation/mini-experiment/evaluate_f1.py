@@ -73,12 +73,15 @@ def evaluate_single_file(json_path: Path) -> dict | None:
     # 解析 memory_name
     memory_name = json_path.parent.name
     m = NAME_RE.match(memory_name)
-    if not m:
-        return None
-
-    dim = m.group("dim")
-    structure = m.group("structure")
-    strategy = m.group("strategy")
+    if m:
+        dim = m.group("dim")
+        structure = m.group("structure")
+        strategy = m.group("strategy")
+    else:
+        # neuromem-bench 命名约定: TiM / MemoryOS / Mem0g 等
+        dim = "bench"
+        structure = "bench"
+        strategy = memory_name
     dataset = data.get("experiment_info", {}).get("dataset", json_path.parent.parent.name)
     task_id = data.get("experiment_info", {}).get("task_id", "")
 
