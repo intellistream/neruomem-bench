@@ -1,0 +1,86 @@
+# LoCoMo 数据集评估配置
+#
+# 该配置文件定义了LoCoMo数据集的评估方式
+# 包括数据路径、评估指标、输出格式等
+
+dataset:
+  name: "locomo"
+  description: "LoCoMo Long-form Conversation Memory Dataset"
+
+# 数据路径配置
+paths:
+  base_dir: ".sage/benchmarks/benchmark_memory/locomo"
+  output_dir: ".sage/benchmarks/benchmark_memory/locomo/output/round_analysis"
+
+# 实验目录前缀
+prefixes:
+  - "PostInsert_"
+  - "PreInsert_"
+
+# 评估器配置
+evaluator:
+  # 使用LoCoMo专用评估器（支持Category 1-5的特殊处理）
+  name: "locomo"
+
+  # Category说明：
+  # 1: 多答案问题，需要f1_multi处理逗号分隔的多个答案
+  # 2: 单答案问题，标准F1
+  # 3: 需要清理分号后的注释部分
+  # 4: 标准F1
+  # 5: 判断是否正确识别"信息未提及"（特殊二分类）
+
+# 指标配置
+metrics:
+  - name: "f1"
+    display_name: "F1 Score"
+    ylabel: "F1 Score"
+    description: "Token-level F1 with Porter Stemmer"
+
+  - name: "insert_time"
+    display_name: "Insert Time per Item"
+    ylabel: "Time (ms)"
+    description: "Average insert time per memory item"
+
+  - name: "retrieval_time"
+    display_name: "Retrieval Time per Query"
+    ylabel: "Time (ms)"
+    description: "Average retrieval time per query"
+
+# Category配置
+categories:
+  # Category标签（用于图表和报告显示）
+  labels:
+    1: "Multi-Answer"
+    2: "Time-Related"
+    3: "Clean-Comments"
+    4: "Standard"
+    5: "Not-Mentioned"
+
+  # Category描述
+  descriptions:
+    1: "多答案问题，需要f1_multi处理逗号分隔的多个答案"
+    2: "时间相关问题，标准F1"
+    3: "需要清理分号后注释部分"
+    4: "标准问题，标准F1"
+    5: "判断是否正确识别'信息未提及'"
+
+# 输出配置
+output:
+  # 生成的文件类型
+  formats:
+    - png  # 图表
+    - csv  # 数据表
+    - md   # Markdown报告
+
+  # 图表配置
+  charts:
+    comparison: true      # 生成策略对比图
+    single_strategy: true # 生成单策略详情图
+    dpi: 300
+    figsize: [12, 7]
+
+# 报告配置
+report:
+  include_summary: true
+  include_detailed: true
+  language: "en"  # 报告语言: en, zh

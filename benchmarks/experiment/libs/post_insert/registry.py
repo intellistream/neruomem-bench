@@ -16,6 +16,7 @@ Example:
 
 from .base import BasePostInsertAction
 from .none_action import NoneAction
+from .conflict_resolution.semantic_consolidation import SemanticConsolidationAction
 
 
 class PostInsertActionRegistry:
@@ -49,6 +50,9 @@ class PostInsertActionRegistry:
 
 # Register built-in actions
 PostInsertActionRegistry.register("none", NoneAction)
+PostInsertActionRegistry.register(
+    "conflict_resolution.semantic_consolidation", SemanticConsolidationAction
+)
 
 
 def get_action(name: str, config: dict) -> BasePostInsertAction:

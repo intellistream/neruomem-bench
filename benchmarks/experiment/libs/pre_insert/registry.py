@@ -15,6 +15,7 @@
 
 from .base import BasePreInsertAction
 from .none_action import NoneAction
+from .rewrite.triplet_extract import TripleExtractAction
 
 
 class PreInsertActionRegistry:
@@ -68,3 +69,4 @@ class PreInsertActionRegistry:
 
 # 注册内置 Action
 PreInsertActionRegistry.register("none", NoneAction)
+PreInsertActionRegistry.register("extract.triple", TripleExtractAction)

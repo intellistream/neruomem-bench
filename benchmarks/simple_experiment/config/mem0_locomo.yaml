@@ -1,0 +1,89 @@
+# ============================================================================
+# NeuroMem Benchmark — mem0 on LoCoMo 配置
+# ============================================================================
+#
+# mem0 官方文档: https://docs.mem0.ai
+#
+# mem0 本地模式依赖：
+#   - LLM 服务（用于记忆提取与问答评估）
+#   - Embedding 服务（可选，mem0 内部用于向量化）
+#   - Qdrant 向量数据库（运行在本地或容器中）
+#
+# 使用方式:
+#   python -m benchmarks.simple_experiment.simple_pipeline \
+#       --config benchmarks/simple_experiment/config/mem0_locomo.yaml \
+#       --task_id <your_task_id>
+#
+# 注意:
+#   1. 请先启动 LLM 和 Embedding 服务（见 scripts/deploy/）
+#   2. 请先启动 Qdrant: docker run -p 6333:6333 qdrant/qdrant
+#   3. pip install mem0ai qdrant-client
+# ============================================================================
+
+# ── 运行时参数 ──────────────────────────────────────────────────────────────
+runtime:
+  dataset: "locomo"              # 数据集名称，需提前注册到 DataLoaderFactory
+  # task_id: "conv-26"           # 任务 ID，也可通过 --task_id 命令行参数传入
+  test_segments: 5               # 将总问题数分成 N 段依次触发测试
+  memory_name: "mem0"            # 输出目录标识（.sage/benchmarks/.../mem0/）
+
+  # LLM 服务（用于问答评估阶段）
+  api_key: "EMPTY"
+  base_url: "http://localhost:18000/v1"
+  model_name: "meta-llama/Llama-3.1-8B-Instruct"
+  max_tokens: 256
+  temperature: 0.0
+  seed: 42
+
+  pipeline_service_timeout: 300.0
+
+  # QA 评估提示词（与 TiM 实验保持一致以确保公平比较）
+  prompt_template: |
+    Answer in a short phrase (3-8 words). Plain text only. No ** or formatting.
+    - For "what/who": just the thing/person
+    - For "when":    just the date/time
+    - For "why":     start with "because"
+
+    Q: {question}
+    A:
+
+# ── 记忆服务配置 ────────────────────────────────────────────────────────────
+services:
+  services_type: "simple.mem0"
+
+  mem0:
+    top_k: 5                     # 每次检索返回的最大记忆条数
+    user_id_scope: "auto"        # "auto" = task_id + 时间戳（每次运行隔离）
+                                 # "task" = task_id 固定（跨运行共享记忆）
+
+    # mem0 内部配置（透传给 mem0.Memory.from_config()）
+    # 若留空则使用 mem0 默认配置（需配置 MEM0_API_KEY 环境变量）
+    mem0_config:
+      llm:
+        provider: "openai"
+        config:
+          model: "meta-llama/Llama-3.1-8B-Instruct"
+          openai_base_url: "http://localhost:18000/v1"
+          api_key: "EMPTY"
+          max_tokens: 2000
+          temperature: 0.0
+
+      embedder:
+        provider: "openai"
+        config:
+          model: "BAAI/bge-m3"
+          openai_base_url: "http://localhost:18001/v1"
+          api_key: "EMPTY"
+
+      vector_store:
+        provider: "qdrant"
+        config:
+          collection_name: "neuromem_bench_mem0"
+          host: "localhost"
+          port: 6333
+
+# ── 检索算子配置 ────────────────────────────────────────────────────────────
+operators:
+  simple_retrieval:
+    # 检索结果送入 MemoryEvaluation 前的文本前缀
+    conversation_format_prompt: "The following are relevant memories:\n"

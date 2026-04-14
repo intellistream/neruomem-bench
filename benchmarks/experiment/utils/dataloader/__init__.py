@@ -8,8 +8,13 @@
 
 from .base import BaseDataLoader
 from .factory import DataLoaderFactory
+from .adapters.locomo_adapter import LocalLocomoAdapter
+
+# 自动注册内置适配器
+DataLoaderFactory.register("locomo", LocalLocomoAdapter)
 
 __all__ = [
     "BaseDataLoader",
     "DataLoaderFactory",
+    "LocalLocomoAdapter",
 ]

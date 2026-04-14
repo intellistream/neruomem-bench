@@ -36,6 +36,9 @@ dependencies = [
     "pytest>=7.0.0",
 ]
 
+[project.optional-dependencies]
+mem0 = ["mem0ai", "qdrant-client"]
+
 [project.scripts]
 neuromem-bench = "test.cli:main"
 
@@ -47,3 +50,4 @@ include = ["benchmarks*", "test*"]
 
 [tool.setuptools.package-data]
 "benchmarks.experiment.config" = ["*.yaml"]
+"benchmarks.simple_experiment.config" = ["*.yaml"]

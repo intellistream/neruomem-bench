@@ -1,0 +1,140 @@
+# ============================================================================
+# NeuroMem Benchmark — TiM (Think-in-Memory) 示例配置
+# ============================================================================
+#
+# 论文: TiM: Think-in-Memory: Recalling and Post-thinking Enable LLMs with
+#       Long-term Memory (https://arxiv.org/abs/2311.08719)
+#
+# TiM 核心设计:
+#   1. Pre-Insert:  LLM 三元组提取 (extract.triple)
+#      - 只存储三元组，不保存原始对话，降低冗余噪声
+#      - 每轮对话生成 (Subject, Predicate, Object) 结构化事实
+#   2. Storage:     LSH 哈希索引 (partitional.lsh_hash)
+#      - 基于 MinHash + Jaccard 相似度做近似检索
+#   3. Pre-Retrieval: Embedding 向量化 (embedding)
+#      - 将查询转为向量，供后续语义检索使用
+#   4. Post-Insert: 语义巩固 (conflict_resolution.semantic_consolidation)
+#      - 插入后检索相似记忆，超过阈值则调用 LLM 合并去重
+#
+# 使用方式:
+#   python -m benchmarks.experiment.memory_test_pipeline \
+#       --config benchmarks/experiment/config/tim_locomo_pipeline.yaml \
+#       --task_id <your_task_id>
+#
+# 注意:
+#   - dataset 字段需要和你注册到 DataLoaderFactory 的名称一致
+#   - 请先运行 deploy_bge_m3.sh 和 deploy_llama31_8b.sh 启动模型服务
+# ============================================================================
+
+# ── 运行时参数 ──────────────────────────────────────────────────────────────
+runtime:
+  dataset: "locomo"          # 数据集名称，需提前注册到 DataLoaderFactory
+  # task_id: "conv-26"       # 任务 ID，也可通过 --task_id 命令行参数传入
+  test_segments: 5           # 将总问题数分成 N 段依次触发测试
+  memory_name: "TiM"         # 输出目录标识
+
+  # LLM 服务（用于三元组提取 + 评估阶段生成答案）
+  api_key: "EMPTY"
+  base_url: "http://localhost:18000/v1"
+  model_name: "meta-llama/Llama-3.1-8B-Instruct"
+  max_tokens: 256
+  temperature: 0.0
+  seed: 42
+
+  # Embedding 服务（用于 pre_retrieval: embedding）
+  embedding_base_url: "http://localhost:18001/v1"
+  embedding_model: "BAAI/bge-m3"
+
+  # 服务调用超时（TiM 三元组提取 + LLM 蒸馏耗时较长，建议 ≥ 600s）
+  pipeline_service_timeout: 600.0
+
+  # QA 评估提示词
+  prompt_template: |
+    Answer in a short phrase (3-8 words). Plain text only. No ** or formatting.
+    - For "what/who": just the thing/person
+    - For "when":    just the date/time
+    - For "why":     start with "because"
+
+    Q: {question}
+    A:
+
+# ── 记忆服务配置 ────────────────────────────────────────────────────────────
+services:
+  # 使用本地 TiMTripleStoreService（无 sage 数据结构依赖）
+  services_type: "local.tim_triple_store"
+
+  tim_triple_store:
+    # MinHash LSH 参数（文本检索回退）
+    n_gram: 3              # 文本 n-gram shingle 大小
+    num_perm: 128          # MinHash 排列数（推荐 64-256）
+    threshold: 0.3         # Jaccard 相似度阈值（TiM 三元组较短，适当调低）
+
+    # 向量检索参数
+    retrieval_top_k: 10    # 检索返回最多 K 条结果
+
+# ── Pipeline 算子配置 ───────────────────────────────────────────────────────
+operators:
+
+  # ── D1: PreInsert - 三元组提取 ──────────────────────────────────────────
+  pre_insert:
+    action: "extract.triple"
+    extraction_method: "llm"   # 使用 LLM 提取，fallback 到启发式规则
+    max_triplets: 10
+    keep_original: false       # TiM 论文：只存储三元组，不存储原始对话
+
+    triple_extraction_prompt: |
+      You are a factual knowledge extractor.
+      Analyze the dialogue below and extract all subject–predicate–object triples
+      that represent explicitly stated or directly inferable real-world facts about
+      people, organizations, objects, preferences, roles, locations, activities,
+      or states.
+
+      Guidelines:
+      - Map "I", "me", "my" to the speaker's name provided in the dialogue log.
+      - Include personal states, plans, or situations if clearly described.
+      - Resolve pronouns to specific entities; skip if the referent is ambiguous.
+      - Avoid redundancy; consolidate repeated details into a single precise triple.
+      - Use natural-language predicates in active voice.
+        Capture time/location directly in the predicate (e.g., "starts at 5 PM").
+      - Do NOT assume external knowledge; base everything on what is said.
+
+      Output ONLY in this format:
+
+        (Subject, Predicate, Object)
+        ...
+
+      If no extractable facts:
+        None
+
+      Dialogue:
+      {dialogue}
+
+  # ── D2: PostInsert - 语义巩固（TiM 记忆蒸馏）──────────────────────────
+  post_insert:
+    action: "conflict_resolution.semantic_consolidation"
+    retrieve_count: 10      # 检索候选相似记忆数量
+    min_merge_count: 5      # 相似记忆 >= 5 条才触发 LLM 合并
+
+    merge_prompt: |
+      You are a memory consolidation expert.
+      Given the following facts about a person, your task is to:
+        1. Remove exact or near-duplicate facts (same meaning, different wording).
+        2. Merge related facts into more complete, specific statements.
+        3. Remove logically subsumed facts (if A fully implies B, remove B).
+        4. Preserve all unique, non-redundant information.
+
+      Output ONLY the consolidated list of facts, one per line.
+      Do NOT add numbering, bullets, or any explanation.
+
+      Facts:
+      {memories}
+
+  # ── D3: PreRetrieval - 向量化查询 ───────────────────────────────────────
+  pre_retrieval:
+    action: "embedding"        # 将用户问题编码为 bge-m3 向量
+
+  # ── D4: PostRetrieval - 直通（TiM 基线不做后处理）────────────────────
+  post_retrieval:
+    action: "none"
+    conversation_format_prompt: |
+      The following are relevant facts retrieved from memory.

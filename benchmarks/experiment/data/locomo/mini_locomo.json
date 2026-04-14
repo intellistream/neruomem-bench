@@ -1,0 +1,106 @@
+[
+  {
+    "task_id": "conv-mini-01",
+    "sessions": [
+      {
+        "session_id": 0,
+        "messages": [
+          {"speaker": "Alice", "text": "Hey Bob, I just started a new job at InnovateTech last Monday. It feels great!"},
+          {"speaker": "Bob",   "text": "Congratulations! What role are you in?"},
+          {"speaker": "Alice", "text": "I'm a senior data engineer on the infrastructure team."},
+          {"speaker": "Bob",   "text": "That sounds exciting. Do you work remotely or in the office?"},
+          {"speaker": "Alice", "text": "Mostly remote, but I go into the San Francisco office on Tuesdays."},
+          {"speaker": "Bob",   "text": "Nice. I heard InnovateTech just raised a big Series B round."},
+          {"speaker": "Alice", "text": "Yes, 80 million dollars. My manager Emma said we're doubling the engineering team."},
+          {"speaker": "Bob",   "text": "Are you still living in Berkeley?"},
+          {"speaker": "Alice", "text": "Actually no — I moved to Oakland two months ago. The commute is much better."},
+          {"speaker": "Bob",   "text": "Makes sense. How do you like Oakland so far?"},
+          {"speaker": "Alice", "text": "I love it. There's a farmers market near my apartment every Sunday."},
+          {"speaker": "Bob",   "text": "That sounds awesome. I'll have to visit sometime."}
+        ]
+      },
+      {
+        "session_id": 1,
+        "messages": [
+          {"speaker": "Alice", "text": "Bob, I finished the distributed caching project I mentioned last week!"},
+          {"speaker": "Bob",   "text": "Already? That was fast. How did the review go?"},
+          {"speaker": "Alice", "text": "Really well. Emma approved it and it's going to production next Friday."},
+          {"speaker": "Bob",   "text": "Impressive. Are you taking any time off after that?"},
+          {"speaker": "Alice", "text": "Yes, I'm flying to Tokyo with my partner for two weeks starting April 20th."},
+          {"speaker": "Bob",   "text": "Tokyo in spring — that's perfect timing for cherry blossoms."},
+          {"speaker": "Alice", "text": "Exactly! My partner loves Japanese food, so we're going to try lots of restaurants."},
+          {"speaker": "Bob",   "text": "Have you been learning any Japanese?"},
+          {"speaker": "Alice", "text": "Just the basics. I've been using the Duolingo app every morning since January."},
+          {"speaker": "Bob",   "text": "That's dedication. What time does your flight leave?"},
+          {"speaker": "Alice", "text": "7 AM from SFO. We have a layover in Seattle."}
+        ]
+      }
+    ],
+    "questions": [
+      {
+        "question": "Where does Alice work?",
+        "answer": "Alice works at InnovateTech.",
+        "category": "factual",
+        "evidence": "Alice: I just started a new job at InnovateTech last Monday.",
+        "visible_session": 0,
+        "visible_dialog": 3
+      },
+      {
+        "question": "What is Alice's job title?",
+        "answer": "Alice is a senior data engineer.",
+        "category": "factual",
+        "evidence": "Alice: I'm a senior data engineer on the infrastructure team.",
+        "visible_session": 0,
+        "visible_dialog": 3
+      },
+      {
+        "question": "Where does Alice live?",
+        "answer": "Alice lives in Oakland.",
+        "category": "factual",
+        "evidence": "Alice: I moved to Oakland two months ago.",
+        "visible_session": 0,
+        "visible_dialog": 9
+      },
+      {
+        "question": "Who is Alice's manager?",
+        "answer": "Alice's manager is Emma.",
+        "category": "factual",
+        "evidence": "Alice: My manager Emma said we're doubling the engineering team.",
+        "visible_session": 0,
+        "visible_dialog": 7
+      },
+      {
+        "question": "How much did InnovateTech raise in its Series B round?",
+        "answer": "InnovateTech raised 80 million dollars.",
+        "category": "factual",
+        "evidence": "Alice: Yes, 80 million dollars.",
+        "visible_session": 0,
+        "visible_dialog": 7
+      },
+      {
+        "question": "Where is Alice going on vacation?",
+        "answer": "Alice is going to Tokyo.",
+        "category": "factual",
+        "evidence": "Alice: I'm flying to Tokyo with my partner for two weeks.",
+        "visible_session": 1,
+        "visible_dialog": 5
+      },
+      {
+        "question": "When does Alice leave for her vacation?",
+        "answer": "Alice leaves on April 20th.",
+        "category": "factual",
+        "evidence": "Alice: I'm flying to Tokyo with my partner for two weeks starting April 20th.",
+        "visible_session": 1,
+        "visible_dialog": 5
+      },
+      {
+        "question": "What language app does Alice use?",
+        "answer": "Alice uses the Duolingo app.",
+        "category": "factual",
+        "evidence": "Alice: I've been using the Duolingo app every morning since January.",
+        "visible_session": 1,
+        "visible_dialog": 9
+      }
+    ]
+  }
+]
