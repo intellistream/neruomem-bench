@@ -1,23 +1,28 @@
 # ============================================================================
-# NeuroMem Benchmark — mem0 on LoCoMo 配置
+# NeuroMem Benchmark — mem0 on LoCoMo 配置（本地 FAISS 模式）
 # ============================================================================
 #
 # mem0 官方文档: https://docs.mem0.ai
 #
-# mem0 本地模式依赖：
-#   - LLM 服务（用于记忆提取与问答评估）
-#   - Embedding 服务（可选，mem0 内部用于向量化）
-#   - Qdrant 向量数据库（运行在本地或容器中）
+# 本配置使用 FAISS 作为向量存储（无需 Qdrant），完全本地运行。
+# 依赖：
+#   - mem0ai（pip install mem0ai，已包含 FAISS 支持）
+#   - faiss-cpu（pip install faiss-cpu）
+#   - LLM 服务（bash scripts/deploy/deploy_llama31_8b.sh）
+#   - Embedding 服务（bash scripts/deploy/deploy_bge_m3.sh）
 #
 # 使用方式:
 #   python -m benchmarks.simple_experiment.simple_pipeline \
 #       --config benchmarks/simple_experiment/config/mem0_locomo.yaml \
-#       --task_id <your_task_id>
+#       --task_id conv-mini-01
 #
-# 注意:
-#   1. 请先启动 LLM 和 Embedding 服务（见 scripts/deploy/）
-#   2. 请先启动 Qdrant: docker run -p 6333:6333 qdrant/qdrant
-#   3. pip install mem0ai qdrant-client
+# 若需要 Qdrant 模式，将 vector_store 部分改为：
+#   vector_store:
+#     provider: "qdrant"
+#     config:
+#       collection_name: "neuromem_bench_mem0"
+#       host: "localhost"
+#       port: 6333
 # ============================================================================
 
 # ── 运行时参数 ──────────────────────────────────────────────────────────────
@@ -57,7 +62,6 @@ services:
                                  # "task" = task_id 固定（跨运行共享记忆）
 
     # mem0 内部配置（透传给 mem0.Memory.from_config()）
-    # 若留空则使用 mem0 默认配置（需配置 MEM0_API_KEY 环境变量）
     mem0_config:
       llm:
         provider: "openai"
@@ -74,13 +78,15 @@ services:
           model: "BAAI/bge-m3"
           openai_base_url: "http://localhost:18001/v1"
           api_key: "EMPTY"
+          # embedding_dims 不传：vLLM 的 BGE-M3 不支持维度截断参数
 
       vector_store:
-        provider: "qdrant"
+        provider: "faiss"
         config:
           collection_name: "neuromem_bench_mem0"
-          host: "localhost"
-          port: 6333
+          # path: null  → 不持久化，每次运行从空记忆开始
+          distance_strategy: "cosine"
+          embedding_model_dims: 1024   # 必须与 embedder 输出维度一致
 
 # ── 检索算子配置 ────────────────────────────────────────────────────────────
 operators:
