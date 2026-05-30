@@ -30,13 +30,21 @@ class LLMGenerator:
         max_tokens: int = 512,
         temperature: float = 0.7,
         seed: int | None = None,
+        request_timeout: float = 120.0,
+        max_retries: int = 2,
         **kwargs: Any,
     ):
-        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=request_timeout,
+            max_retries=max_retries,
+        )
         self.model_name = model_name
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.seed = seed
+        self.request_timeout = request_timeout
         self.extra_params = kwargs
 
     @classmethod
@@ -47,6 +55,8 @@ class LLMGenerator:
         max_tokens = config.get(f"{prefix}.max_tokens", 512)
         temperature = config.get(f"{prefix}.temperature", 0.7)
         seed = config.get(f"{prefix}.seed")
+        request_timeout = config.get(f"{prefix}.llm_request_timeout", 120.0)
+        max_retries = config.get(f"{prefix}.llm_max_retries", 2)
 
         if not all([api_key, base_url, model_name]):
             raise ValueError("缺少必需的 LLM 配置: api_key, base_url, model_name")
@@ -72,6 +82,8 @@ class LLMGenerator:
             max_tokens=max_tokens,
             temperature=temperature,
             seed=seed,
+            request_timeout=request_timeout,
+            max_retries=max_retries,
             **extra_params,
         )
 
@@ -88,6 +100,7 @@ class LLMGenerator:
 
         request_params.update(self.extra_params)
         request_params.update(override_params)
+        request_params.setdefault("timeout", self.request_timeout)
 
         response = self.client.chat.completions.create(**request_params)
 
