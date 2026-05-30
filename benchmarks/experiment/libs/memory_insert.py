@@ -9,9 +9,13 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from sage.foundation import MapFunction
-
+from benchmarks.experiment.libs._map_function_compat import MapFunction
 from benchmarks.experiment.utils import process_logger
+from benchmarks.experiment.libs.runtime_adapter import (
+    extract_service_telemetry,
+    memory_entry_to_bench_dict,
+    normalize_memory_entry,
+)
 
 
 @dataclass
@@ -19,6 +23,7 @@ class InsertStats:
     """插入统计数据模型"""
 
     inserted: int
+    skipped: int
     failed: int
     entry_ids: list[str]
     entries: list[dict[str, Any]]
@@ -38,14 +43,23 @@ class MemoryInsert(MapFunction):
         self.verbose = config.get("runtime.memory_insert_verbose", False)
 
     def execute(self, data: dict[str, Any]) -> dict[str, Any]:
-        memory_entries = data.get("memory_entries", [])
-        stats = InsertStats(inserted=0, failed=0, entry_ids=[], entries=[], errors=[])
+        raw_entries = data.get("memory_entries", [])
+        memory_entries = [
+            memory_entry_to_bench_dict(normalize_memory_entry(entry), entry) for entry in raw_entries
+        ]
+        data["memory_entries"] = memory_entries
+        stats = InsertStats(inserted=0, skipped=0, failed=0, entry_ids=[], entries=[], errors=[])
 
         batch_start = time.perf_counter()
 
         for entry in memory_entries:
             try:
                 entry_id = self._insert_entry(entry)
+                if not entry_id:
+                    stats.skipped += 1
+                    if self.verbose:
+                        self.logger.info("Skipped insert for entry: %s", entry.get("text", "")[:50])
+                    continue
                 stats.inserted += 1
                 stats.entry_ids.append(entry_id)
                 stats.entries.append(
@@ -70,7 +84,7 @@ class MemoryInsert(MapFunction):
 
         batch_elapsed_ms = (time.perf_counter() - batch_start) * 1000
         print(
-            f"  [MemoryInsert] 插入: {stats.inserted}条 | 失败: {stats.failed}条 | 耗时: {batch_elapsed_ms:.2f}ms",
+            f"  [MemoryInsert] 插入: {stats.inserted}条 | 跳过: {stats.skipped}条 | 失败: {stats.failed}条 | 耗时: {batch_elapsed_ms:.2f}ms",
             flush=True,
         )
 
@@ -84,18 +98,26 @@ class MemoryInsert(MapFunction):
         else:
             data.setdefault("stage_timings", {})["memory_insert_ms"] = []
 
+        telemetry = extract_service_telemetry(
+            self.call_service,
+            self.service_name,
+            event_types={"insert", "insert_skipped"},
+        )
+        if telemetry is not None:
+            data.setdefault("service_telemetry", {})["insert"] = telemetry
+
         return data
 
     def _insert_entry(self, entry: dict[str, Any]) -> str:
-        text = entry.get("text", "")
-        if not text:
+        memory_entry = normalize_memory_entry(entry)
+        if not memory_entry.text:
             raise ValueError("Entry text is empty")
         return self.call_service(
             self.service_name,
             method="insert",
-            entry=text,
-            vector=entry.get("embedding"),
-            metadata=entry.get("metadata", {}),
+            entry=memory_entry.text,
+            vector=memory_entry.vector,
+            metadata=memory_entry.metadata,
             insert_mode=entry.get("insert_mode", "passive"),
             insert_params=entry.get("insert_params"),
             timeout=10.0,

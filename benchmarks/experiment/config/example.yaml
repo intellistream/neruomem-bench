@@ -43,6 +43,19 @@ services:
     retrieval_mode: "recent_first"
     retrieval_top_k: 10
 
+    # 可选: 声明式启用外部策略适配器
+    # 真实示例见 benchmarks/experiment/config/fifo_external_adapters.yaml
+    # strategy_adapters:
+    #   - name: "streamfp_selector"   # 插入前筛选
+    #     enabled: true
+    #     repo_path: "/home/shuhao/streamfp"
+    #     threshold: 0.35
+    #   - name: "flowrag_retriever"   # 检索后扩展召回
+    #     enabled: true
+    #     repo_path: "/home/shuhao/FlowRAG"
+    #     index_dir: "/absolute/path/to/flowrag/index"
+    #     index_name: "toy"
+
 # Operator 配置
 operators:
   pre_insert:

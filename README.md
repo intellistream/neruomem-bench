@@ -10,6 +10,12 @@ Benchmark suite for NeuroMem memory systems
 
 **neuromem-bench** is the standalone benchmark companion for [NeuroMem](https://github.com/intellistream/NeuroMem). It provides an extensible pipeline architecture to evaluate memory systems under long-dialogue scenarios, supporting both native NeuroMem/TiM operators and black-box adapters (e.g., mem0).
 
+## Publication
+
+This benchmark suite accompanies the following paper:
+
+- Ruicheng Zhang et al. "Neuromem: A Granular Decomposition of the Streaming Lifecycle in External Memory for LLMs." ICML 2026. See also the [arXiv version](https://arxiv.org/abs/2602.13967).
+
 ## Owner & Contact
 
 - Repository Owner: [@KimmoZAG](https://github.com/KimmoZAG) (RuiCheng / 张睿诚)
@@ -62,6 +68,43 @@ bash scripts/run_tim_locomo.sh --task_id conv-26
 # Multiple tasks: --tasks "conv-26 conv-27"
 ```
 
+Online continual neural memory now has a ready-to-run LoCoMo template too:
+
+```bash
+python -m benchmarks.experiment.memory_test_pipeline \
+  --config benchmarks/experiment/config/online_continual_memory_locomo_pipeline.yaml \
+  --task_id conv-mini-01
+
+# Or use the convenience script
+bash scripts/run_online_continual_locomo.sh --task_id conv-mini-01
+```
+
+This config uses the built-in local `locomo` adapter. By default it reads
+`benchmarks/experiment/data/locomo/mini_locomo.json`; set `LOCOMO_DATA_FILE`
+to point at another LoCoMo-format JSON file if needed.
+
+For a full LoCoMo JSON file, use the production-oriented template:
+
+```bash
+bash scripts/run_online_continual_locomo_full.sh \
+  --data_file /absolute/path/to/locomo_full.json \
+  --task_id conv-26
+```
+
+This runner exports `LOCOMO_DATA_FILE` for the built-in local `locomo` adapter,
+so you do not need to edit the YAML just to switch datasets.
+
+If you just need a public LoCoMo file quickly, the repo now includes a helper:
+
+```bash
+bash scripts/download_locomo10.sh
+```
+
+It downloads the public `snap-research/locomo` release file into
+`benchmarks/experiment/data/locomo/locomo10_official.json` and converts it into
+the local adapter format at
+`benchmarks/experiment/data/locomo/locomo10_local.json`.
+
 **Option B — Black-box pipeline** (wrap any external memory system, e.g., mem0):
 
 ```bash
@@ -75,6 +118,38 @@ bash scripts/run_mem0_locomo.sh --task_id conv-26
 
 Outputs are written to `.sage/output/benchmarks/benchmark_memory/<dataset>/<memory_name>/<task_id>_<ts>/`.
 
+### Enable External Strategy Adapters
+
+The native pipeline can now enable repo-backed external adapters directly from YAML via `services.<service_name>.strategy_adapters`.
+
+- `streamfp_selector`: runs before insert and can score or skip low-value entries.
+- `flowrag_retriever`: runs after retrieval and can merge external FlowRAG results into the final context set.
+
+Use [benchmarks/experiment/config/fifo_external_adapters.yaml](benchmarks/experiment/config/fifo_external_adapters.yaml) as the starting point. The main fields are:
+
+```yaml
+services:
+  services_type: "partitional.fifo_queue"
+  fifo_queue:
+    strategy_adapters:
+      - name: "streamfp_selector"
+        enabled: true
+        repo_path: "/home/shuhao/streamfp"
+        threshold: 0.35
+      - name: "flowrag_retriever"
+        enabled: true
+        repo_path: "/home/shuhao/FlowRAG"
+        index_dir: "/absolute/path/to/index"
+        index_name: "toy"
+        external_top_k: 5
+```
+
+Notes:
+
+- Enable one adapter first when bringing up a new environment; it is easier to isolate dependency or path problems.
+- Repo-backed real runs require the same local dependencies used in the integration tests: `faiss-cpu`, `geomloss`, and `loguru`.
+- `streamfp_selector` is useful for insert-time gating, while `flowrag_retriever` is useful for retrieval-time augmentation. They can be enabled independently.
+
 ### Run tests
 
 ```bash
@@ -82,8 +157,22 @@ Outputs are written to `.sage/output/benchmarks/benchmark_memory/<dataset>/<memo
 python test/installation_validation/sage_pipeline.py
 python test/installation_validation/pipeline_as_service.py
 
+# Installation validation for online continual memory
+PYTHONPATH=/home/shuhao/neuromem:$PYTHONPATH \
+python test/installation_validation/online_continual_memory_pipeline.py
+
+# Offline validation with the real local LoCoMo adapter/data but mocked model services
+PYTHONPATH=/home/shuhao/neuromem:$PYTHONPATH \
+python test/installation_validation/online_continual_locomo_pipeline.py
+
+# Component-level benchmark validation with real FlowRAG/streamfp adapters on mock data
+bash scripts/run_fifo_external_adapters_mock.sh --task_id mock-01
+
 # Offline mock benchmark tests
 python -m pytest test/benchmark/ -v
+
+# Config-level validation for external strategy adapter YAML
+python -m pytest test/benchmark/test_strategy_adapter_config.py -v
 ```
 
 ## Architecture

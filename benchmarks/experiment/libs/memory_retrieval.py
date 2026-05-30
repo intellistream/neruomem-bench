@@ -9,8 +9,15 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from sage.foundation import MapFunction
-
+from benchmarks.experiment.libs._map_function_compat import MapFunction
+from benchmarks.experiment.libs.runtime_adapter import (
+    build_query_request,
+    build_sub_query_requests,
+    extract_service_telemetry,
+    merge_retrieval_results,
+    normalize_retrieval_results,
+    query_request_to_dict,
+)
 from benchmarks.experiment.utils import process_logger
 
 
@@ -42,49 +49,31 @@ class MemoryRetrieval(MapFunction):
         start_time = time.perf_counter()
         start = time.time()
 
-        query = data.get("question")
-        vector = data.get("query_embedding")
-        metadata = data.get("metadata", {})
+        query_request = build_query_request(data, self.retrieval_top_k)
+        data["retrieval_request"] = query_request_to_dict(query_request)
+
         retrieve_params = data.get("retrieve_params", {})
+        sub_requests = build_sub_query_requests(query_request, retrieve_params)
 
-        sub_queries = retrieve_params.get("sub_queries", [])
-        multi_query = retrieve_params.get("multi_query", [])
-        queries = sub_queries or multi_query
-
-        if queries and len(queries) >= 1:
-            all_results = []
-            seen_texts: set[str] = set()
-            query_embeddings = retrieve_params.get(
-                "sub_query_embeddings", []
-            ) or retrieve_params.get("expanded_embeddings", [])
-
-            for idx, single_query in enumerate(queries, 1):
-                query_vector = query_embeddings[idx - 1] if idx <= len(query_embeddings) else None
+        if sub_requests:
+            raw_results = []
+            for request in sub_requests:
                 sub_results = self.call_service(
                     self.service_name,
                     method="retrieve",
-                    query=single_query,
-                    vector=query_vector,
-                    metadata=metadata,
-                    top_k=self.retrieval_top_k,
                     timeout=60.0,
+                    **request.to_retrieve_kwargs(),
                 )
-                for result in sub_results or []:
-                    text = result.get("text", "")
-                    if text and text not in seen_texts:
-                        seen_texts.add(text)
-                        all_results.append(result)
-            results = all_results
+                raw_results.extend(sub_results or [])
+            results = merge_retrieval_results(raw_results)
         else:
-            results = self.call_service(
+            raw_results = self.call_service(
                 self.service_name,
                 method="retrieve",
-                query=query,
-                vector=vector,
-                metadata=metadata,
-                top_k=self.retrieval_top_k,
                 timeout=60.0,
+                **query_request.to_retrieve_kwargs(),
             )
+            results = normalize_retrieval_results(raw_results or [])
 
         elapsed = (time.time() - start) * 1000
         stats = RetrievalStats(
@@ -99,10 +88,19 @@ class MemoryRetrieval(MapFunction):
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         data.setdefault("stage_timings", {})["memory_retrieval_ms"] = elapsed_ms
 
+        telemetry = extract_service_telemetry(
+            self.call_service,
+            self.service_name,
+            event_types={"retrieve"},
+        )
+        if telemetry is not None:
+            data.setdefault("service_telemetry", {})["retrieve"] = telemetry
+
         result_texts = [r.get("text", "")[:100] for r in (results or [])[:5]]
         process_logger.log_service(
             "RETRIEVE",
-            f"Query: {query}\nResults: {stats.retrieved} items\nTop results: {result_texts}",
+            "Query: "
+            f"{query_request.query}\nResults: {stats.retrieved} items\nTop results: {result_texts}",
         )
 
         print(

@@ -1,0 +1,55 @@
+# ============================================================================
+# NeuroMem Benchmark - Online Continual Memory (Mock Dataset)
+# ============================================================================
+# 该配置用于一键验证 bench 原生 pipeline 能否挂载 online continual memory。
+#
+# 特点：
+# - 数据集使用 mock_locomo（由安装验证脚本自动注册）
+# - 使用本地 mock LLM / mock embedding，不依赖外部模型服务
+# - 记忆服务为 `partitional.online_continual_memory`
+# - benchmark 结果包会带出 neural memory 的 learning telemetry
+
+runtime:
+  dataset: "mock_locomo"
+  test_segments: 2
+  memory_name: "online_continual_memory_mock"
+
+  api_key: "mock-key"
+  base_url: "http://localhost:0/v1"
+  model_name: "mock-llm"
+  max_tokens: 64
+  temperature: 0.0
+  seed: 42
+
+  embedding_base_url: "http://localhost:0/v1"
+  embedding_model: "mock-embedding"
+
+  prompt_template: |
+    Based on the above context, answer the following question concisely
+    using exact words from the context whenever possible.
+    If the information is not mentioned in the conversation,
+    respond with "Not mentioned in the conversation".
+
+services:
+  services_type: "partitional.online_continual_memory"
+
+  online_continual_memory:
+    collection_type: "neural_continual"
+    feature_dim: 32
+    learning_rate: 0.2
+    replay_buffer_size: 32
+    replay_batch_size: 4
+    retrieval_top_k: 5
+    telemetry_limit: 20
+
+operators:
+  pre_insert:
+    action: "none"
+  post_insert:
+    action: "none"
+  pre_retrieval:
+    action: "embedding"
+  post_retrieval:
+    action: "none"
+    conversation_format_prompt: |
+      The following is some history information.

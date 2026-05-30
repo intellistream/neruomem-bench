@@ -13,8 +13,12 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from sage.foundation import MapFunction
-
+from benchmarks.experiment.libs._map_function_compat import MapFunction
+from benchmarks.experiment.libs.runtime_adapter import (
+    build_query_request,
+    normalize_retrieval_results,
+    query_request_to_dict,
+)
 from benchmarks.experiment.utils import process_logger
 
 
@@ -41,15 +45,19 @@ class SimpleMemorySearch(MapFunction):
     def execute(self, data: dict[str, Any]) -> dict[str, Any]:
         start_time = time.perf_counter()
 
+        query_request = build_query_request(data, self.top_k)
+        data["retrieval_request"] = query_request_to_dict(query_request)
+
         question: str = data.get("question", "")
         question_idx = data.get("question_idx", 0)
 
-        results: list[dict[str, Any]] = self.call_service(
+        raw_results: list[dict[str, Any]] = self.call_service(
             self.adapter_name,
             method="search",
-            query=question,
-            top_k=self.top_k,
+            query=query_request.query,
+            top_k=query_request.top_k,
         ) or []
+        results = normalize_retrieval_results(raw_results)
 
         # 存入 memory_data 供下游使用（与 MemoryRetrieval 输出 key 一致）
         data["memory_data"] = results

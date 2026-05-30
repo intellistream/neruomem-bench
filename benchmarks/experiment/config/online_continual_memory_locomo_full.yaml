@@ -1,0 +1,69 @@
+# ============================================================================
+# NeuroMem Benchmark — Online Continual Memory on Full LoCoMo
+# ============================================================================
+#
+# 该配置面向完整 LoCoMo JSON 文件，而不是仓库自带的 mini_locomo 样本。
+# 数据集仍然通过 bench 内置的 `locomo` adapter 读取，但应在运行前设置：
+#
+#   export LOCOMO_DATA_FILE=/absolute/path/to/your/locomo_full.json
+#
+# 或使用配套脚本：
+#
+#   bash scripts/run_online_continual_locomo_full.sh \
+#       --data_file /absolute/path/to/your/locomo_full.json \
+#       --task_id conv-26
+#
+# 注意：
+#   - 文件必须符合 LocalLocomoAdapter 约定的 LoCoMo JSON 格式
+#   - 运行前请先启动 LLM 与 embedding 服务
+#   - task_id 需来自你提供的 LoCoMo 文件内容
+# ============================================================================
+
+runtime:
+  dataset: "locomo"
+  test_segments: 10
+  memory_name: "online_continual_memory_full"
+
+  api_key: "EMPTY"
+  base_url: "http://localhost:18000/v1"
+  model_name: "meta-llama/Llama-3.1-8B-Instruct"
+  max_tokens: 128
+  temperature: 0.0
+  seed: 42
+
+  embedding_base_url: "http://localhost:18001/v1"
+  embedding_model: "BAAI/bge-m3"
+
+  pipeline_service_timeout: 600.0
+
+  prompt_template: |
+    Based on the above context, answer the following question concisely
+    using exact words from the context whenever possible.
+    If the information is not mentioned in the conversation,
+    respond with "Not mentioned in the conversation".
+
+services:
+  services_type: "partitional.online_continual_memory"
+
+  online_continual_memory:
+    collection_type: "neural_continual"
+    feature_dim: 1024
+    learning_rate: 0.08
+    weight_decay: 0.005
+    replay_buffer_size: 4096
+    replay_batch_size: 16
+    retrieval_top_k: 10
+    score_blend: 0.6
+    telemetry_limit: 100
+
+operators:
+  pre_insert:
+    action: "none"
+  post_insert:
+    action: "none"
+  pre_retrieval:
+    action: "embedding"
+  post_retrieval:
+    action: "none"
+    conversation_format_prompt: |
+      The following is some history information.

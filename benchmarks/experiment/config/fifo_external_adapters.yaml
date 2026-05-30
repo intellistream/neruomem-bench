@@ -1,0 +1,74 @@
+# ============================================================================
+# NeuroMem Benchmark - FIFO + External Strategy Adapters
+# ============================================================================
+# 此配置模板用于在 neuromem-bench 中通过 YAML 直接启用外部策略适配器。
+#
+# 两类适配器分别对应两段生命周期：
+# 1. streamfp_selector  : 插入前打分/筛选（pre-insert）
+# 2. flowrag_retriever  : 检索后外部召回融合（post-retrieval）
+#
+# 使用方式：
+# - 将 enabled: false 改为 true 以启用对应适配器。
+# - 将 repo_path / index_dir 等路径改为你本机的真实路径。
+# - 如果只验证其中一条链路，建议只打开一个适配器，便于定位问题。
+
+runtime:
+  dataset: "your_dataset"
+  test_segments: 10
+  memory_name: "fifo_external_adapters"
+
+  api_key: "your-api-key"
+  base_url: "http://localhost:8000/v1"
+  model_name: "your-model-name"
+  max_tokens: 512
+  temperature: 0.7
+  seed: 42
+
+  # embedding_base_url: "http://localhost:8091/v1"
+  # embedding_model: "BAAI/bge-m3"
+
+  prompt_template: |
+    Based on the above context, answer the following question concisely
+    using exact words from the context whenever possible.
+    If the information is not mentioned in the conversation,
+    respond with "Not mentioned in the conversation".
+
+services:
+  services_type: "partitional.fifo_queue"
+
+  fifo_queue:
+    max_capacity: 1000
+    vector_dim: 1024
+    retrieval_mode: "recent_first"
+    retrieval_top_k: 10
+
+    strategy_adapters:
+      - name: "streamfp_selector"
+        enabled: false
+        repo_path: "/home/shuhao/streamfp"
+        query_text_key: "query"
+        entry_text_key: "text"
+        threshold: 0.35
+        scoring:
+          strategy: "streamprompt"
+          measure: "cosine"
+
+      - name: "flowrag_retriever"
+        enabled: false
+        repo_path: "/home/shuhao/FlowRAG"
+        index_dir: "/absolute/path/to/flowrag/index"
+        index_name: "toy"
+        query_encoder: "use_request_vector"
+        external_top_k: 5
+
+operators:
+  pre_insert:
+    action: "none"
+  post_insert:
+    action: "none"
+  pre_retrieval:
+    action: "none"
+  post_retrieval:
+    action: "none"
+    conversation_format_prompt: |
+      The following is some history information.

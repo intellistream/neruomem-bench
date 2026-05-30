@@ -1,0 +1,64 @@
+# ============================================================================
+# NeuroMem Benchmark — Online Continual Memory on LoCoMo
+# ============================================================================
+#
+# 该配置用于在 bench 原生 pipeline 中评估可训练的 neural memory。
+# 相比 mock 配置，这里直接使用本地 LoCoMo 适配器与 bench 自带的 mini_locomo
+# 数据文件，更接近真实 benchmark 数据流。
+#
+# 使用方式：
+#   python -m benchmarks.experiment.memory_test_pipeline \
+#       --config benchmarks/experiment/config/online_continual_memory_locomo_pipeline.yaml \
+#       --task_id conv-mini-01
+#
+# 注意：
+#   - 默认 dataset=locomo，由 neuromem-bench 内置 LocalLocomoAdapter 提供
+#   - 如需替换数据文件，可设置环境变量 LOCOMO_DATA_FILE=/abs/path/to/locomo.json
+#   - 运行前请先启动 LLM 与 embedding 服务（见 scripts/deploy/）
+# ============================================================================
+
+runtime:
+  dataset: "locomo"
+  # task_id: "conv-mini-01"
+  test_segments: 4
+  memory_name: "online_continual_memory"
+
+  api_key: "EMPTY"
+  base_url: "http://localhost:18000/v1"
+  model_name: "meta-llama/Llama-3.1-8B-Instruct"
+  max_tokens: 128
+  temperature: 0.0
+  seed: 42
+
+  embedding_base_url: "http://localhost:18001/v1"
+  embedding_model: "BAAI/bge-m3"
+
+  prompt_template: |
+    Based on the above context, answer the following question concisely
+    using exact words from the context whenever possible.
+    If the information is not mentioned in the conversation,
+    respond with "Not mentioned in the conversation".
+
+services:
+  services_type: "partitional.online_continual_memory"
+
+  online_continual_memory:
+    collection_type: "neural_continual"
+    feature_dim: 1024
+    learning_rate: 0.1
+    replay_buffer_size: 128
+    replay_batch_size: 8
+    retrieval_top_k: 10
+    telemetry_limit: 50
+
+operators:
+  pre_insert:
+    action: "none"
+  post_insert:
+    action: "none"
+  pre_retrieval:
+    action: "embedding"
+  post_retrieval:
+    action: "none"
+    conversation_format_prompt: |
+      The following is some history information.

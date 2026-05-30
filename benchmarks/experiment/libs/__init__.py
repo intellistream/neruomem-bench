@@ -23,16 +23,43 @@
 - lsh/: LSH 近似匹配示例（LSHIndex + LSHHashService）
 """
 
-from benchmarks.experiment.libs.memory_evaluation import MemoryEvaluation
-from benchmarks.experiment.libs.memory_insert import MemoryInsert
-from benchmarks.experiment.libs.memory_retrieval import MemoryRetrieval
-from benchmarks.experiment.libs.memory_sink import MemorySink
-from benchmarks.experiment.libs.memory_source import MemorySource
-from benchmarks.experiment.libs.pipeline_caller import PipelineCaller
-from benchmarks.experiment.libs.post_insert import PostInsert
-from benchmarks.experiment.libs.post_retrieval import PostRetrieval
-from benchmarks.experiment.libs.pre_insert import PreInsert
-from benchmarks.experiment.libs.pre_retrieval import PreRetrieval
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from benchmarks.experiment.libs.memory_evaluation import MemoryEvaluation as MemoryEvaluation
+    from benchmarks.experiment.libs.memory_insert import MemoryInsert as MemoryInsert
+    from benchmarks.experiment.libs.memory_retrieval import MemoryRetrieval as MemoryRetrieval
+    from benchmarks.experiment.libs.memory_sink import MemorySink as MemorySink
+    from benchmarks.experiment.libs.memory_source import MemorySource as MemorySource
+    from benchmarks.experiment.libs.pipeline_caller import PipelineCaller as PipelineCaller
+    from benchmarks.experiment.libs.post_insert import PostInsert as PostInsert
+    from benchmarks.experiment.libs.post_retrieval import PostRetrieval as PostRetrieval
+    from benchmarks.experiment.libs.pre_insert import PreInsert as PreInsert
+    from benchmarks.experiment.libs.pre_retrieval import PreRetrieval as PreRetrieval
+
+
+_EXPORT_MAP = {
+    "MemorySource": ("benchmarks.experiment.libs.memory_source", "MemorySource"),
+    "MemoryInsert": ("benchmarks.experiment.libs.memory_insert", "MemoryInsert"),
+    "MemoryRetrieval": ("benchmarks.experiment.libs.memory_retrieval", "MemoryRetrieval"),
+    "MemoryEvaluation": ("benchmarks.experiment.libs.memory_evaluation", "MemoryEvaluation"),
+    "MemorySink": ("benchmarks.experiment.libs.memory_sink", "MemorySink"),
+    "PipelineCaller": ("benchmarks.experiment.libs.pipeline_caller", "PipelineCaller"),
+    "PreInsert": ("benchmarks.experiment.libs.pre_insert", "PreInsert"),
+    "PostInsert": ("benchmarks.experiment.libs.post_insert", "PostInsert"),
+    "PreRetrieval": ("benchmarks.experiment.libs.pre_retrieval", "PreRetrieval"),
+    "PostRetrieval": ("benchmarks.experiment.libs.post_retrieval", "PostRetrieval"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _EXPORT_MAP:
+        module_name, attr_name = _EXPORT_MAP[name]
+        module = __import__(module_name, fromlist=[attr_name])
+        return getattr(module, attr_name)
+    raise AttributeError(f"module 'benchmarks.experiment.libs' has no attribute {name!r}")
 
 __all__ = [
     # 顶层算子

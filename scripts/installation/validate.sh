@@ -18,6 +18,30 @@ validate_install() {
     echo "[INFO]  $MSG_VALIDATING" | tee -a "$log_file"
     echo "--- validation: $(date) ---" >> "$log_file"
 
+    if ! conda run --no-capture-output -n "$env_name" python - <<'PY' 2>&1 | tee -a "$log_file"
+import importlib
+
+required = ["sage.foundation", "sage.runtime", "sage.neuromem"]
+missing = []
+for module_name in required:
+    try:
+        importlib.import_module(module_name)
+        print(f"[OK]    import {module_name}")
+    except Exception as exc:
+        missing.append((module_name, f"{type(exc).__name__}: {exc}"))
+
+if missing:
+    for module_name, reason in missing:
+        print(f"[ERROR] missing {module_name}: {reason}")
+    raise SystemExit(1)
+PY
+    then
+        echo "[ERROR] $MSG_VALIDATE_FAIL" | tee -a "$log_file"
+        printf "        $MSG_ACTIVATE_HINT\n" "$env_name" | tee -a "$log_file"
+        echo "[INFO]  $(printf "$MSG_LOG_SAVED" "$log_file")"
+        return 1
+    fi
+
     if conda run --no-capture-output -n "$env_name" python "$script" 2>&1 | tee -a "$log_file"; then
         echo "[OK]    $MSG_VALIDATE_OK" | tee -a "$log_file"
         echo "" | tee -a "$log_file"

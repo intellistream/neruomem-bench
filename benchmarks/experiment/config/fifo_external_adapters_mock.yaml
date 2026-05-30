@@ -1,0 +1,68 @@
+# ============================================================================
+# NeuroMem Benchmark - FIFO + External Strategy Adapters (Mock Dataset)
+# ============================================================================
+# 该配置用于一键验证 bench 原生 pipeline 能否挂载外部 strategy adapter。
+#
+# 特点：
+# - 数据集使用 mock_locomo（由安装验证脚本自动注册）
+# - 检索增强使用真实本地 FlowRAG 代码与临时构建的 Faiss 索引
+# - 插入筛选使用真实本地 streamfp 相似度实现（运行时由验证脚本注入 selector/model）
+# - LLM/Embedding API 调用会被验证脚本替换为本地 mock，不依赖外部模型服务
+
+runtime:
+  dataset: "mock_locomo"
+  test_segments: 2
+  memory_name: "fifo_external_adapters_mock"
+
+  api_key: "mock-key"
+  base_url: "http://localhost:0/v1"
+  model_name: "mock-llm"
+  max_tokens: 64
+  temperature: 0.0
+  seed: 42
+
+  embedding_base_url: "http://localhost:0/v1"
+  embedding_model: "mock-embedding"
+
+  prompt_template: |
+    Based on the above context, answer the following question concisely
+    using exact words from the context whenever possible.
+    If the information is not mentioned in the conversation,
+    respond with "Not mentioned in the conversation".
+
+services:
+  services_type: "partitional.fifo_queue"
+
+  fifo_queue:
+    max_capacity: 100
+    max_size: 100
+    vector_dim: 2
+    retrieval_mode: "recent_first"
+    retrieval_top_k: 5
+
+    strategy_adapters:
+      - name: "streamfp_selector"
+        enabled: true
+        repo_path: "/home/shuhao/streamfp"
+        threshold: 0.0
+        measure: "cosine"
+
+      - name: "flowrag_retriever"
+        enabled: true
+        repo_path: "/home/shuhao/FlowRAG"
+        index_dir: "__TEMP_FLOWRAG_INDEX_DIR__"
+        index_name: "tiny"
+        external_top_k: 1
+        merge_mode: "prepend"
+
+operators:
+  pre_insert:
+    action: "none"
+  post_insert:
+    action: "none"
+  pre_retrieval:
+    action: "embedding"
+  post_retrieval:
+    action: "none"
+    conversation_format_prompt: |
+      The following is some history information.

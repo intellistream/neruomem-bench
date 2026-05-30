@@ -12,7 +12,8 @@
 #   --tensor-parallel-size N    Number of GPUs       (default: 1)
 #   --dtype DTYPE               Model dtype          (default: auto)
 #   --max-model-len N           Max context length   (default: 8192)
-#   --env ENV_NAME              Conda env name       (default: neuromem)
+#   --env ENV_NAME|ENV_PATH     Conda env name/path  (default: neuromem)
+#   --vllm-bin CMD              vLLM CLI command     (default: auto-detect vllm-hust/vllm)
 #   --hf-token TOKEN            HuggingFace token    (REQUIRED for Llama gated repo)
 #   --                          Pass remaining args directly to vllm serve
 #
@@ -47,6 +48,7 @@ TP_SIZE="1"
 DTYPE="auto"
 MAX_MODEL_LEN="8192"
 HF_TOKEN=""
+VLLM_BIN=""
 EXTRA_ARGS=()
 MODEL="meta-llama/Llama-3.1-8B-Instruct"
 
@@ -54,6 +56,7 @@ MODEL="meta-llama/Llama-3.1-8B-Instruct"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --env)                   ENV_NAME="$2";      shift 2 ;;
+        --vllm-bin)              VLLM_BIN="$2";      shift 2 ;;
         --host)                  HOST="$2";           shift 2 ;;
         --port)                  PORT="$2";           shift 2 ;;
         --gpus)                  GPU_DEVICES="$2";   shift 2 ;;
@@ -71,18 +74,52 @@ done
 source "$INSTALL_DIR/check_conda.sh"
 check_conda
 
+CONDA_TARGET_FLAG="-n"
+CONDA_TARGET_VALUE="$ENV_NAME"
+if [[ "$ENV_NAME" == /* ]]; then
+    CONDA_TARGET_FLAG="-p"
+fi
+
 # ── Step 2: Enforce active conda environment ─────────────────────────────────
 echo ""
 echo "[INFO]  Checking active conda environment..."
 ACTIVE_ENV="${CONDA_DEFAULT_ENV:-}"
-if [[ "$ACTIVE_ENV" != "$ENV_NAME" ]]; then
-    echo "[ERROR] This script must be run inside the '$ENV_NAME' conda environment."
-    echo "        Current active environment: '${ACTIVE_ENV:-<none>}'"
-    echo "        Please activate it first:"
-    echo "          conda activate $ENV_NAME"
-    exit 1
+ACTIVE_PREFIX="${CONDA_PREFIX:-}"
+if [[ "$CONDA_TARGET_FLAG" == "-p" ]]; then
+    if [[ "$ACTIVE_PREFIX" != "$ENV_NAME" ]]; then
+        echo "[ERROR] This script must be run inside the target conda environment path."
+        echo "        Current active prefix: '${ACTIVE_PREFIX:-<none>}'"
+        echo "        Expected prefix      : '$ENV_NAME'"
+        echo "        Please activate it first:"
+        echo "          conda activate $ENV_NAME"
+        exit 1
+    fi
+    echo "[OK]    Active environment prefix is '$ENV_NAME'."
+else
+    if [[ "$ACTIVE_ENV" != "$ENV_NAME" ]]; then
+        echo "[ERROR] This script must be run inside the '$ENV_NAME' conda environment."
+        echo "        Current active environment: '${ACTIVE_ENV:-<none>}'"
+        echo "        Please activate it first:"
+        echo "          conda activate $ENV_NAME"
+        exit 1
+    fi
+    echo "[OK]    Active environment is '$ENV_NAME'."
 fi
-echo "[OK]    Active environment is '$ENV_NAME'."
+
+IN_ACTIVE_TARGET_ENV="false"
+if [[ "$CONDA_TARGET_FLAG" == "-p" && "$ACTIVE_PREFIX" == "$CONDA_TARGET_VALUE" ]]; then
+    IN_ACTIVE_TARGET_ENV="true"
+elif [[ "$CONDA_TARGET_FLAG" == "-n" && "$ACTIVE_ENV" == "$CONDA_TARGET_VALUE" ]]; then
+    IN_ACTIVE_TARGET_ENV="true"
+fi
+
+run_in_target_env() {
+    if [[ "$IN_ACTIVE_TARGET_ENV" == "true" ]]; then
+        "$@"
+    else
+        conda run --no-capture-output "$CONDA_TARGET_FLAG" "$CONDA_TARGET_VALUE" "$@"
+    fi
+}
 
 # ── Step 3: Check / install vLLM minimum dependencies ────────────────────────
 echo ""
@@ -92,12 +129,20 @@ mkdir -p "$LOG_DIR"
 INSTALL_LOG="$LOG_DIR/install_plus_vllm_llm_$(date +%Y%m%d_%H%M%S).log"
 
 _check_vllm() {
-    conda run --no-capture-output -n "$ENV_NAME" \
-        python -c "import vllm" 2>/dev/null
+    run_in_target_env python -c "import vllm" 2>/dev/null
 }
 
+if [[ -z "$VLLM_BIN" ]]; then
+    if run_in_target_env bash -lc 'command -v vllm-hust >/dev/null 2>&1'; then
+        VLLM_BIN="vllm-hust"
+    else
+        VLLM_BIN="vllm"
+    fi
+fi
+echo "[INFO]  Using CLI: $VLLM_BIN"
+
 if _check_vllm; then
-    VLLM_VER="$(conda run --no-capture-output -n "$ENV_NAME" \
+    VLLM_VER="$(run_in_target_env \
         python -c "import vllm; print(vllm.__version__)" 2>/dev/null || echo "unknown")"
     echo "[OK]    vllm found (version: $VLLM_VER)"
 else
@@ -107,7 +152,7 @@ else
     echo "model: $MODEL"                          >> "$INSTALL_LOG"
     echo "======================================" >> "$INSTALL_LOG"
 
-    conda run --no-capture-output -n "$ENV_NAME" \
+    run_in_target_env \
         pip install "vllm" 2>&1 | tee -a "$INSTALL_LOG"
 
     if _check_vllm; then
@@ -149,17 +194,23 @@ export HUGGING_FACE_HUB_TOKEN="$HF_TOKEN"
 [[ -n "${HF_ENDPOINT:-}" ]]              && export HF_ENDPOINT
 export HF_HUB_HTTP_TIMEOUT="${HF_HUB_HTTP_TIMEOUT:-120}"
 export HF_HUB_DOWNLOAD_RETRY_COUNT="${HF_HUB_DOWNLOAD_RETRY_COUNT:-5}"
+export HF_HOME="$BENCH_ROOT/.sage/huggingface"
+export HF_HUB_CACHE="$HF_HOME/hub"
+export HUGGINGFACE_HUB_CACHE="$HF_HUB_CACHE"
+export TRANSFORMERS_CACHE="$HF_HUB_CACHE"
+mkdir -p "$HF_HOME" "$HF_HUB_CACHE"
+MODEL_DIR="$BENCH_ROOT/.sage/models/llama31_8b_instruct"
+mkdir -p "$MODEL_DIR"
 
 echo ""
-echo "[INFO]  Pre-downloading model weights to local HF cache..."
-echo "        (Already-cached files are skipped automatically)"
-if conda run --no-capture-output -n "$ENV_NAME" \
-        huggingface-cli download "$MODEL" --token "$HF_TOKEN" 2>&1 ; then
-    echo "[OK]    Model weights ready in local cache."
+echo "[INFO]  Pre-downloading model weights to local directory..."
+echo "        $MODEL_DIR"
+if run_in_target_env \
+        huggingface-cli download "$MODEL" --token "$HF_TOKEN" --local-dir "$MODEL_DIR" 2>&1 ; then
+    echo "[OK]    Model weights ready at: $MODEL_DIR"
 else
     echo "[WARN]  Pre-download ended with errors."
-    echo "        vLLM will attempt to load from cache anyway."
-    echo "        If the model is not cached, startup may fail."
+    echo "        vLLM will still attempt to load from: $MODEL_DIR"
 fi
 
 # ── Step 4.9: Kill any lingering vLLM processes before startup ──────────────
@@ -185,7 +236,7 @@ _cleanup_existing() {
     fi
     # 2. Any remaining vLLM processes matching model name on target port
     local stale_pids
-    stale_pids="$(pgrep -f "vllm.*[Ll]lama.*$PORT|vllm.*$PORT.*[Ll]lama" 2>/dev/null || true)"
+    stale_pids="$(pgrep -f "vllm(-hust)?.*[Ll]lama.*$PORT|vllm(-hust)?.*$PORT.*[Ll]lama" 2>/dev/null || true)"
     if [[ -n "$stale_pids" ]]; then
         echo "[INFO]  Killing stale vLLM LLM processes: $stale_pids"
         echo "$stale_pids" | xargs -r kill -KILL 2>/dev/null || true
@@ -203,16 +254,18 @@ PID_FILE="$RUN_LOG_DIR/llama31_8b.pid"
 
 echo ""
 echo "[INFO]  Starting vLLM LLM server for $MODEL (background)"
+echo "[INFO]  Local model dir: $MODEL_DIR"
 echo "[INFO]  Endpoint : http://$HOST:$PORT/v1/chat/completions"
 echo "[INFO]  GPUs     : CUDA_VISIBLE_DEVICES=$GPU_DEVICES"
 echo "[INFO]  Env      : $ENV_NAME"
+echo "[INFO]  CLI      : $VLLM_BIN"
 echo "[INFO]  Server log: $SERVER_LOG"
 echo "[INFO]  PID file  : $PID_FILE"
 echo ""
 
 # Build the command array
 CMD_ARGS=(
-    vllm serve "$MODEL"
+    "$VLLM_BIN" serve "$MODEL_DIR"
     --host "$HOST"
     --port "$PORT"
     --gpu-memory-utilization "$GPU_MEM_UTIL"
@@ -224,8 +277,16 @@ CMD_ARGS=(
 # Append any extra passthrough arguments
 [[ ${#EXTRA_ARGS[@]} -gt 0 ]] && CMD_ARGS+=("${EXTRA_ARGS[@]}")
 
+LAUNCH_CMD=()
+if [[ "$IN_ACTIVE_TARGET_ENV" == "true" ]]; then
+    LAUNCH_CMD=("${CMD_ARGS[@]}")
+else
+    LAUNCH_CMD=(conda run --no-capture-output "$CONDA_TARGET_FLAG" "$CONDA_TARGET_VALUE" "${CMD_ARGS[@]}")
+fi
+
 # Env vars already exported in Step 4.5; echo summary here
 echo "[INFO]  CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
+echo "[INFO]  HF_HOME=$HF_HOME"
 [[ -n "${HF_ENDPOINT:-}" ]] && echo "[INFO]  HF_ENDPOINT=$HF_ENDPOINT"
 [[ -n "$HF_TOKEN" ]]        && echo "[INFO]  HuggingFace token set."
 
@@ -233,7 +294,7 @@ echo "[INFO]  CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 if [[ -f "$SERVER_LOG" ]]; then
     mv "$SERVER_LOG" "${SERVER_LOG%.log}_$(date +%Y%m%d_%H%M%S).log"
 fi
-nohup conda run --no-capture-output -n "$ENV_NAME" "${CMD_ARGS[@]}" \
+nohup "${LAUNCH_CMD[@]}" \
     >> "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "$SERVER_PID" > "$PID_FILE"

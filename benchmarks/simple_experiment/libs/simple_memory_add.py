@@ -12,8 +12,11 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from sage.foundation import MapFunction
-
+from benchmarks.experiment.libs._map_function_compat import MapFunction
+from benchmarks.experiment.libs.runtime_adapter import (
+    memory_entry_to_bench_dict,
+    normalize_memory_entry,
+)
 from benchmarks.experiment.utils import process_logger
 
 
@@ -54,11 +57,13 @@ class SimpleMemoryAdd(MapFunction):
                 "dialog_id": dialog_id,
                 "source": "dialog",
             }
+            memory_entry = normalize_memory_entry({"text": combined_text, "metadata": metadata})
+            data["memory_entries"] = [memory_entry_to_bench_dict(memory_entry)]
             entry_id = self.call_service(
                 self.adapter_name,
                 method="add",
-                text=combined_text,
-                metadata=metadata,
+                text=memory_entry.text,
+                metadata=memory_entry.metadata,
             )
             inserted = 1
             process_logger.log_service(
