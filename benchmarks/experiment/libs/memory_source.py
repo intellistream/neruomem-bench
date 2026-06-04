@@ -67,6 +67,11 @@ class MemorySource(BatchFunction):
             "is_session_end": is_session_end,
         }
 
+        if is_session_end and hasattr(self.loader, "session_summary"):
+            session_summary = self.loader.session_summary(self.task_id, session_id)
+            if session_summary:
+                result["session_summary"] = session_summary
+
         self.dialog_ptr += dialog_increment
         self.packet_idx += 1
 

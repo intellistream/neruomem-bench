@@ -37,23 +37,27 @@ runtime:
   pipeline_service_timeout: 600.0
 
   prompt_template: |
-    Based on the above context, answer the following question concisely
-    using exact words from the context whenever possible.
-    If the information is not mentioned in the conversation,
-    respond with "Not mentioned in the conversation".
+    Answer the question concisely using exact words from the context whenever
+    possible. If the exact span would be too cryptic, use a brief one-sentence
+    answer, but do not explain or repeat surrounding details. If the
+    information is not mentioned in the conversation, respond exactly with
+    "Not mentioned in the conversation".
 
 services:
   services_type: "partitional.online_continual_memory"
 
   online_continual_memory:
     collection_type: "neural_continual"
-    feature_dim: 1024
+    feature_dim: 128
     learning_rate: 0.08
     weight_decay: 0.005
     replay_buffer_size: 4096
-    replay_batch_size: 16
-    retrieval_top_k: 10
+    replay_batch_size: 8
+    retrieval_top_k: 2
+    retrieval_score_gap_margin: 0.15
     score_blend: 0.6
+    query_overlap_bias: 0.15
+    query_snippet_max_chars: 120
     telemetry_limit: 100
 
 operators:

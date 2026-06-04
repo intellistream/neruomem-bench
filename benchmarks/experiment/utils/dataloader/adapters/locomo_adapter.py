@@ -65,9 +65,11 @@ class LocalLocomoAdapter(BaseDataLoader):
             raw: list[dict[str, Any]] = json.load(f)
 
         # 构建索引: task_id → record
-        self._records: dict[str, dict[str, Any]] = {
-            rec["task_id"]: rec for rec in raw
-        }
+        self._records: dict[str, dict[str, Any]] = {}
+        for rec in raw:
+            record_id = rec.get("task_id") or rec.get("sample_id")
+            if record_id:
+                self._records[str(record_id)] = rec
 
     @property
     def dataset_name(self) -> str:
@@ -130,6 +132,23 @@ class LocalLocomoAdapter(BaseDataLoader):
             "messages": self.message_count(task_id),
             "questions": self.question_count(task_id),
         }
+
+    def session_summary(self, task_id: str, session_x: int) -> str:
+        """返回指定会话的摘要文本；若数据中不存在则返回空串。"""
+        record = self._get_record(task_id)
+        summary_block = record.get("session_summary", {})
+        if not summary_block:
+            return ""
+
+        summary_keys = [
+            f"session_{session_x + 1}_summary",
+            f"session_{session_x}_summary",
+        ]
+        for key in summary_keys:
+            summary_text = summary_block.get(key, "")
+            if summary_text:
+                return str(summary_text).strip()
+        return ""
 
     def list_tasks(self) -> list[str]:
         """列出所有可用 task_id。"""

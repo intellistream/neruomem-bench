@@ -96,6 +96,7 @@ class PipelineCaller(MapFunction):
             "session_id": session_id,
             "dialog_id": dialog_id,
             "dialogs": dialogs,
+            "session_summary": data.get("session_summary", ""),
             "packet_idx": packet_idx,
             "total_packets": total_packets,
             "is_session_end": is_session_end,

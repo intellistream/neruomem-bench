@@ -69,7 +69,8 @@ services:
           model: "meta-llama/Llama-3.1-8B-Instruct"
           openai_base_url: "http://localhost:18000/v1"
           api_key: "EMPTY"
-          max_tokens: 2000
+          # mem0's extraction prompt is large on this host; keep a strict margin under 8k.
+          max_tokens: 32
           temperature: 0.0
 
       embedder:

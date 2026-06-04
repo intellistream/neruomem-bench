@@ -73,11 +73,21 @@ def convert_record(record: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
-    return {
+    converted = {
         "task_id": record.get("sample_id", ""),
         "sessions": sessions,
         "questions": _convert_questions(record.get("qa") or []),
     }
+
+    session_summary = record.get("session_summary")
+    if isinstance(session_summary, dict) and session_summary:
+        converted["session_summary"] = session_summary
+
+    event_summary = record.get("event_summary")
+    if isinstance(event_summary, dict) and event_summary:
+        converted["event_summary"] = event_summary
+
+    return converted
 
 
 def parse_args() -> argparse.Namespace:

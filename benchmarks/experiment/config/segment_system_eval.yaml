@@ -1,0 +1,17 @@
+# ============================================================================
+# Segment service system-evaluation config for ATC-facing runtime measurements.
+# ============================================================================
+
+runtime:
+  memory_name: "segment_system_eval"
+
+services:
+  services_type: "partitional.segment"
+
+  segment:
+    segment_strategy: "time"
+    time_window: 3600
+    max_segment_size: 64
+    vector_dim: 1024
+    retrieval_top_k: 5
+    telemetry_limit: 100

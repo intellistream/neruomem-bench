@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import importlib
+import json
 import logging
 import os
 import sys
@@ -129,9 +131,28 @@ def _build_flowrag_index(index_dir: Path) -> None:
     faiss_index.save("tiny")
 
 
-def _prepare_config(config_path: Path, task_id: str, flowrag_index_dir: Path) -> RuntimeConfig:
+def _prepare_config(
+    config_path: Path,
+    task_id: str,
+    flowrag_index_dir: Path,
+    *,
+    enable_write_gate: bool,
+    enable_retrieval_expansion: bool,
+) -> RuntimeConfig:
     config = RuntimeConfig.load(str(config_path), task_id=task_id)
-    adapter_specs = config.get("services.fifo_queue.strategy_adapters") or []
+    adapter_specs = copy.deepcopy(config.get("services.fifo_queue.strategy_adapters") or [])
+    filtered_specs = []
+    for spec in adapter_specs:
+        adapter_name = spec.get("name") or spec.get("type")
+        if adapter_name == "streamfp_selector" and not enable_write_gate:
+            continue
+        if adapter_name == "flowrag_retriever" and not enable_retrieval_expansion:
+            continue
+        filtered_specs.append(spec)
+
+    config._config.setdefault("services", {}).setdefault("fifo_queue", {})[
+        "strategy_adapters"
+    ] = filtered_specs
 
     _add_repo_to_path(STREAMFP_REPO)
     streamprompt_module = importlib.import_module("dataselections.streamprompt")
@@ -141,10 +162,14 @@ def _prepare_config(config_path: Path, task_id: str, flowrag_index_dir: Path) ->
     def build_examples(entries, context):
         del context
         text_lower = entries[0].text.lower()
-        fill_value = 1.0 if "rain" in text_lower else -1.0
+        fill_value = (
+            1.0
+            if "really like rainy days" in text_lower or "feel peaceful" in text_lower
+            else -1.0
+        )
         return torch.full((1, 2, 768), fill_value=fill_value, dtype=torch.float32)
 
-    for spec in adapter_specs:
+    for spec in filtered_specs:
         adapter_name = spec.get("name") or spec.get("type")
         if adapter_name == "streamfp_selector":
             spec["selector"] = selector
@@ -169,7 +194,13 @@ def _create_fifo_service(config: RuntimeConfig):
     )
 
 
-def run_pipeline(config: RuntimeConfig) -> None:
+def run_pipeline(
+    config: RuntimeConfig,
+    *,
+    scenario_name: str,
+    enable_write_gate: bool,
+    enable_retrieval_expansion: bool,
+) -> dict[str, object]:
     task_id = config.get("task_id", "unknown")
     loader = MockLocomoLoader()
 
@@ -191,8 +222,11 @@ def run_pipeline(config: RuntimeConfig) -> None:
         total_questions, segments=config.get("runtime.test_segments", 2)
     )
     next_threshold_idx = 0
+    insert_candidates = 0
     total_inserted = 0
-    saw_flowrag_result = False
+    insert_counts: list[int] = []
+    expanded_queries = 0
+    retrieval_result_counts: list[int] = []
 
     for session_id, max_dialog_idx in loader.sessions(task_id):
         dialog_ptr = 0
@@ -214,7 +248,10 @@ def run_pipeline(config: RuntimeConfig) -> None:
             data = mem_insert.execute(data)
             data = post_insert.execute(data)
 
-            total_inserted += data.get("insert_stats", {}).get("inserted", 0)
+            inserted = int(data.get("insert_stats", {}).get("inserted", 0))
+            insert_candidates += 1
+            total_inserted += inserted
+            insert_counts.append(inserted)
 
             visible_dialog = dialog_ptr + dialog_len - 1
             current_questions = loader.get_evaluation(task_id, session_id, visible_dialog)
@@ -239,30 +276,110 @@ def run_pipeline(config: RuntimeConfig) -> None:
                     td = mem_retrieval.execute(td)
                     td = post_retrieval.execute(td)
                     td = mem_evaluation.execute(td)
-                    saw_flowrag_result = saw_flowrag_result or any(
+                    retrieval_result_count = len(td.get("memory_data", []))
+                    retrieval_result_counts.append(retrieval_result_count)
+                    expansion_present = any(
                         item.get("metadata", {}).get("source") == "flowrag"
                         for item in td.get("memory_data", [])
                     )
+                    if expansion_present:
+                        expanded_queries += 1
                 next_threshold_idx += 1
 
             dialog_ptr += dialog_len
 
     stored_items = fifo_service.get_recent(limit=10)
+    streamfp_items = [
+        item
+        for item in stored_items
+        if item.get("metadata", {}).get("strategy_adapter") == "streamfp_selector"
+        and item.get("metadata", {}).get("streamfp_score") is not None
+    ]
     saw_streamfp_metadata = any(
         item.get("metadata", {}).get("strategy_adapter") == "streamfp_selector"
         and item.get("metadata", {}).get("streamfp_score") is not None
         for item in stored_items
     )
+    skipped_entries = insert_candidates - total_inserted
+    summary: dict[str, object] = {
+        "scenario": scenario_name,
+        "task_id": task_id,
+        "write_gate_enabled": enable_write_gate,
+        "retrieval_expansion_enabled": enable_retrieval_expansion,
+        "insert_candidates": insert_candidates,
+        "inserted_entries": total_inserted,
+        "skipped_entries": skipped_entries,
+        "insert_counts": insert_counts,
+        "retrieval_queries": len(retrieval_result_counts),
+        "expanded_queries": expanded_queries,
+        "avg_retrieval_result_count": (
+            sum(retrieval_result_counts) / len(retrieval_result_counts)
+            if retrieval_result_counts
+            else 0.0
+        ),
+        "max_retrieval_result_count": max(retrieval_result_counts) if retrieval_result_counts else 0,
+        "last_retrieval_result_count": retrieval_result_counts[-1] if retrieval_result_counts else 0,
+        "stored_entries": len(stored_items),
+        "stored_entries_with_gate_metadata": len(streamfp_items),
+        "gate_scores": [
+            float(item.get("metadata", {}).get("streamfp_score")) for item in streamfp_items
+        ],
+    }
 
-    assert total_inserted == 2, f"expected 2 kept entries after streamfp gating, got {total_inserted}"
-    assert saw_flowrag_result, "expected FlowRAG retrieval augmentation in benchmark loop"
-    assert saw_streamfp_metadata, "expected stored entries to preserve streamfp metadata"
+    if enable_write_gate:
+        assert total_inserted == 1, f"expected 1 kept entry after write gating, got {total_inserted}"
+        assert skipped_entries == 1, f"expected 1 skipped entry after write gating, got {skipped_entries}"
+        assert saw_streamfp_metadata, "expected stored entries to preserve gate metadata"
+    else:
+        assert total_inserted == 2, f"expected 2 kept entries without write gating, got {total_inserted}"
+        assert skipped_entries == 0, f"expected 0 skipped entries without write gating, got {skipped_entries}"
+
+    if enable_retrieval_expansion:
+        assert expanded_queries >= 1, "expected at least one retrieval query with expansion"
+    else:
+        assert expanded_queries == 0, "did not expect retrieval expansion without the expansion module"
+
+    return summary
+
+
+def run_ablation_scenarios(config_path: Path, task_id: str, flowrag_index_dir: Path) -> dict[str, object]:
+    scenarios = [
+        ("fifo_base", False, False),
+        ("fifo_write_gate", True, False),
+        ("fifo_retrieval_expansion", False, True),
+        ("fifo_gate_plus_expansion", True, True),
+    ]
+    scenario_summaries: list[dict[str, object]] = []
+
+    for scenario_name, enable_write_gate, enable_retrieval_expansion in scenarios:
+        config = _prepare_config(
+            config_path,
+            task_id,
+            flowrag_index_dir,
+            enable_write_gate=enable_write_gate,
+            enable_retrieval_expansion=enable_retrieval_expansion,
+        )
+        scenario_summaries.append(
+            run_pipeline(
+                config,
+                scenario_name=scenario_name,
+                enable_write_gate=enable_write_gate,
+                enable_retrieval_expansion=enable_retrieval_expansion,
+            )
+        )
+
+    return {
+        "task_id": task_id,
+        "summary_type": "mechanism_ablation",
+        "scenarios": scenario_summaries,
+    }
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate external strategy adapters in bench")
     parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG))
     parser.add_argument("--task_id", type=str, default="mock-01")
+    parser.add_argument("--summary-json", type=str, default="")
     return parser.parse_args()
 
 
@@ -282,8 +399,6 @@ def main() -> int:
 
         flowrag_index_dir = tmp_path / "flowrag_index"
         _build_flowrag_index(flowrag_index_dir)
-        config = _prepare_config(Path(args.config), args.task_id, flowrag_index_dir)
-
         with (
             patch("benchmarks.experiment.libs.pre_insert.operator.LLMGenerator", MockLLMGenerator),
             patch(
@@ -308,10 +423,16 @@ def main() -> int:
             patch("benchmarks.experiment.libs.memory_evaluation.LLMGenerator", MockLLMGenerator),
         ):
             try:
-                run_pipeline(config)
+                summary = run_ablation_scenarios(Path(args.config), args.task_id, flowrag_index_dir)
             finally:
                 process_logger.close()
                 os.environ.pop("PROCESS_LOG_DIR", None)
+
+    if args.summary_json:
+        summary_path = Path(args.summary_json)
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        print(f"\n📦 adapter summary written to {summary_path}")
 
     print("\n✅ external strategy adapter benchmark validation passed")
     return 0

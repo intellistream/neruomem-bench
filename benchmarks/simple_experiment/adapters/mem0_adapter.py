@@ -97,7 +97,11 @@ class Mem0Adapter(BaseSimpleMemoryAdapter):
     def search(self, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
         """检索与 query 相关的记忆，返回标准化结果列表。"""
         limit = top_k if top_k is not None else self._top_k
-        result = self._memory.search(query, user_id=self._user_id, limit=limit)
+        result = self._memory.search(
+            query,
+            limit=limit,
+            filters={"user_id": self._user_id},
+        )
 
         # 同上，兼容新旧 mem0 返回格式
         if isinstance(result, dict):
@@ -122,12 +126,12 @@ class Mem0Adapter(BaseSimpleMemoryAdapter):
 
     def clear(self) -> None:
         """清空当前 user_id 下的所有记忆。"""
-        self._memory.delete_all(user_id=self._user_id)
+        self._memory.delete_all(filters={"user_id": self._user_id})
 
     def get_stats(self) -> dict[str, Any]:
         """返回当前记忆条数统计。"""
         try:
-            all_memories = self._memory.get_all(user_id=self._user_id)
+            all_memories = self._memory.get_all(filters={"user_id": self._user_id})
             if isinstance(all_memories, dict):
                 all_memories = all_memories.get("results", [])
             count = len(all_memories) if all_memories else 0

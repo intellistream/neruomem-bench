@@ -118,6 +118,36 @@ bash scripts/run_mem0_locomo.sh --task_id conv-26
 
 Outputs are written to `.sage/output/benchmarks/benchmark_memory/<dataset>/<memory_name>/<task_id>_<ts>/`.
 
+### Run ATC-style system benchmarks
+
+The repository also includes a lightweight runtime benchmark driver for the
+ATC-facing systems matrix. It measures three views directly at the memory
+service boundary:
+
+- concurrency scaling: throughput, tail latency, and Jain fairness
+- retained-state footprint: process RSS, Python heap peak, and backend storage stats
+- observability overhead: telemetry disabled vs enabled under the same workload
+
+Use the dedicated online continual config as a starting point:
+
+```bash
+python -m benchmarks.evaluation.system_runtime_bench \
+  --config benchmarks/experiment/config/online_continual_memory_system_eval.yaml \
+  --workers 1 2 4 8 \
+  --initial-records 128 \
+  --operations-per-worker 64 \
+  --insert-every 4 \
+  --retrieval-top-k 3 \
+  --footprint-checkpoints 64,128,256,512 \
+  --telemetry-limit-enabled 100 \
+  --output .sage/output/benchmarks/system_runtime/online_continual_memory_atc.json
+```
+
+This command writes a JSON report with `concurrency`, `footprint`, and
+`observability` sections. The driver can also be pointed at other service YAMLs
+as long as they define `services.services_type` and the corresponding service
+config block.
+
 ### Enable External Strategy Adapters
 
 The native pipeline can now enable repo-backed external adapters directly from YAML via `services.<service_name>.strategy_adapters`.

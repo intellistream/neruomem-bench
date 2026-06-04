@@ -1,0 +1,48 @@
+# ============================================================================
+# NeuroMem Benchmark — FIFO Queue on LoCoMo
+# ============================================================================
+#
+# A plain FIFO queue baseline for the bench-native LoCoMo pipeline.
+# It avoids external adapters so the resulting run can serve as a simple
+# short-term-memory reference point in the paper-facing evaluation.
+# ============================================================================
+
+runtime:
+  dataset: "locomo"
+  test_segments: 5
+  memory_name: "fifo_queue"
+
+  api_key: "EMPTY"
+  base_url: "http://localhost:18000/v1"
+  model_name: "meta-llama/Llama-3.1-8B-Instruct"
+  max_tokens: 128
+  temperature: 0.0
+  seed: 42
+
+  prompt_template: |
+    Based on the above context, answer the following question concisely
+    using exact words from the context whenever possible.
+    If the information is not mentioned in the conversation,
+    respond with "Not mentioned in the conversation".
+
+services:
+  services_type: "partitional.fifo_queue"
+
+  fifo_queue:
+    max_capacity: 1000
+    max_size: 1000
+    vector_dim: 1024
+    retrieval_mode: "recent_first"
+    retrieval_top_k: 10
+
+operators:
+  pre_insert:
+    action: "none"
+  post_insert:
+    action: "none"
+  pre_retrieval:
+    action: "none"
+  post_retrieval:
+    action: "none"
+    conversation_format_prompt: |
+      The following is some history information.

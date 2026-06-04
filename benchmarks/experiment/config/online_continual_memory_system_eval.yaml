@@ -1,0 +1,18 @@
+# ============================================================================
+# NeuroMem system-evaluation config for ATC-facing runtime measurements.
+# ============================================================================
+
+runtime:
+  memory_name: "online_continual_memory_system_eval"
+
+services:
+  services_type: "partitional.online_continual_memory"
+
+  online_continual_memory:
+    collection_type: "neural_continual"
+    feature_dim: 32
+    learning_rate: 0.2
+    replay_buffer_size: 32
+    replay_batch_size: 4
+    retrieval_top_k: 5
+    telemetry_limit: 100

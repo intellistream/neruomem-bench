@@ -1,0 +1,53 @@
+# ============================================================================
+# NeuroMem Benchmark — Feature+Queue+Segment Combination on LoCoMo
+# ============================================================================
+#
+# A native combination baseline for the bench-native LoCoMo pipeline.
+# It uses the built-in feature + FIFO + segment service without external
+# adapters so the resulting run can serve as a stronger native comparison point
+# in Panel A.
+# ============================================================================
+
+runtime:
+  dataset: "locomo"
+  test_segments: 5
+  memory_name: "feature_queue_segment_combination"
+
+  api_key: "EMPTY"
+  base_url: "http://localhost:18000/v1"
+  model_name: "meta-llama/Llama-3.1-8B-Instruct"
+  max_tokens: 128
+  temperature: 0.0
+  seed: 42
+
+  prompt_template: |
+    Based on the above context, answer the following question concisely
+    using exact words from the context whenever possible.
+    If the information is not mentioned in the conversation,
+    respond with "Not mentioned in the conversation".
+
+services:
+  services_type: "partitional.feature_queue_segment_combination"
+
+  feature_queue_segment_combination:
+    fifo_max_size: 64
+    segment_strategy: "time"
+    segment_threshold: 3600
+    enable_feature_extraction: true
+    combination_strategy: "weighted"
+    weights:
+      feature_index: 0.55
+      fifo_index: 0.25
+      segment_index: 0.20
+
+operators:
+  pre_insert:
+    action: "none"
+  post_insert:
+    action: "none"
+  pre_retrieval:
+    action: "none"
+  post_retrieval:
+    action: "none"
+    conversation_format_prompt: |
+      The following is some history information.

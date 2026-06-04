@@ -41,7 +41,26 @@ class NoneAction(BasePreInsertAction):
             },
         }
 
-        entry = self._set_default_fields(entry)
-        entry["insert_method"] = "none"
+        entries = [self._set_default_fields(entry)]
 
-        return PreInsertOutput(memory_entries=[entry])
+        session_summary = input_data.data.get("session_summary", "")
+        if session_summary:
+            summary_entry = self._set_default_fields(
+                {
+                    "text": session_summary,
+                    "metadata": {
+                        "action": "none",
+                        "entry_type": "session_summary",
+                        "dialog_count": len(dialogs),
+                    },
+                    "insert_params": {
+                        "skip_parametric_update": True,
+                    },
+                }
+            )
+            summary_entry["insert_method"] = "session_summary"
+            entries.append(summary_entry)
+
+        entries[0]["insert_method"] = "none"
+
+        return PreInsertOutput(memory_entries=entries)

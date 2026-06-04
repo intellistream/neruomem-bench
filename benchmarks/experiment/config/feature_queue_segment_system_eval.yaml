@@ -1,0 +1,22 @@
+# ============================================================================
+# Feature+Queue+Segment combination system-evaluation config (ATC-facing).
+# ============================================================================
+
+runtime:
+  memory_name: "feature_queue_segment_system_eval"
+
+services:
+  services_type: "partitional.feature_queue_segment_combination"
+
+  feature_queue_segment_combination:
+    fifo_max_size: 64
+    segment_strategy: "time"
+    segment_threshold: 3600
+    enable_feature_extraction: true
+    combination_strategy: "weighted"
+    weights:
+      feature_index: 0.55
+      fifo_index: 0.25
+      segment_index: 0.20
+    retrieval_top_k: 5
+    telemetry_limit: 100

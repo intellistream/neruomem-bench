@@ -1,0 +1,17 @@
+# ============================================================================
+# FIFO queue system-evaluation config for ATC-facing runtime measurements.
+# ============================================================================
+
+runtime:
+  memory_name: "fifo_queue_system_eval"
+
+services:
+  services_type: "partitional.fifo_queue"
+
+  fifo_queue:
+    max_capacity: 4096
+    max_size: 4096
+    vector_dim: 1024
+    retrieval_mode: "recent_first"
+    retrieval_top_k: 5
+    telemetry_limit: 100
