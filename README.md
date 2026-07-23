@@ -5,16 +5,24 @@ Benchmark suite for NeuroMem memory systems
 </h3>
 
 <p align="center">
-| <a href="https://github.com/intellistream/NeuroMem"><b>NeuroMem Core</b></a> | <a href="https://github.com/intellistream/SAGE"><b>SAGE</b></a> | <a href="https://arxiv.org/abs/2602.13967"><b>Paper (arXiv)</b></a> |
+| <a href="https://github.com/SAGE-Research/neuromem-bench"><b>NeuroMem Benchmark</b></a> | <a href="https://github.com/SAGE-Research/SAGE"><b>SAGE</b></a> | <a href="https://openreview.net/forum?id=mO7DgwFFVe"><b>Paper (ICML / OpenReview)</b></a> |
 </p>
 
-**neuromem-bench** is the standalone benchmark companion for [NeuroMem](https://github.com/intellistream/NeuroMem). It provides an extensible pipeline architecture to evaluate memory systems under long-dialogue scenarios, supporting both native NeuroMem/TiM operators and black-box adapters (e.g., mem0).
+**neuromem-bench** is the canonical public benchmark artifact for NeuroMem in
+the [SAGE ecosystem](https://github.com/SAGE-Research). It provides an
+extensible pipeline architecture to evaluate memory systems under long-dialogue
+scenarios, supporting both native NeuroMem/TiM operators and black-box adapters
+(e.g., mem0).
 
 ## Publication
 
 This benchmark suite accompanies the following paper:
 
-- Ruicheng Zhang et al. "Neuromem: A Granular Decomposition of the Streaming Lifecycle in External Memory for LLMs." ICML 2026. See also the [arXiv version](https://arxiv.org/abs/2602.13967).
+- Ruicheng Zhang, Xinyi Li, Tianyi Xu, Shuhao Zhang, Xiaofei Liao, and Hai
+  Jin. "Neuromem: A Granular Decomposition of the Streaming Lifecycle in
+  External Memory for LLMs." ICML 2026.
+  [OpenReview](https://openreview.net/forum?id=mO7DgwFFVe) |
+  [arXiv](https://arxiv.org/abs/2602.13967).
 
 ## Owner & Contact
 
@@ -27,7 +35,7 @@ This benchmark suite accompanies the following paper:
 
 ```bash
 # Clone
-git clone https://github.com/intellistream/NeuroMem-Bench.git
+git clone https://github.com/SAGE-Research/neuromem-bench.git
 cd neuromem-bench
 
 # Install (editable mode)
@@ -277,7 +285,8 @@ scripts/
 
 ## Part of SAGE Ecosystem
 
-neuromem-bench is a component of the [SAGE](https://github.com/intellistream/SAGE) (Structured AI Graph Engine) project by IntelliStream Team.
+neuromem-bench is a research resource in the
+[SAGE](https://github.com/SAGE-Research/SAGE) ecosystem.
 
 ## License
 
