@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any, Protocol
@@ -51,13 +52,24 @@ class RuntimeConfig:
 
         try:
             with open(config_file) as f:
-                self._config = yaml.safe_load(f) or {}
+                self._config = self._expand_environment(yaml.safe_load(f) or {})
         except yaml.YAMLError as e:
             print(f"❌ 配置文件格式错误: {e}")
             sys.exit(1)
         except Exception as e:
             print(f"❌ 加载配置文件失败: {e}")
             sys.exit(1)
+
+    @classmethod
+    def _expand_environment(cls, value: Any) -> Any:
+        """递归展开配置字符串中的环境变量。"""
+        if isinstance(value, str):
+            return os.path.expandvars(value)
+        if isinstance(value, list):
+            return [cls._expand_environment(item) for item in value]
+        if isinstance(value, dict):
+            return {key: cls._expand_environment(item) for key, item in value.items()}
+        return value
 
     def get(self, key: str, default: Any = None) -> Any:
         """获取配置项，支持点号路径和运行时参数"""

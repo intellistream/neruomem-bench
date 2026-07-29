@@ -9,7 +9,7 @@
 #
 # 使用方式：
 # - 将 enabled: false 改为 true 以启用对应适配器。
-# - 将 repo_path / index_dir 等路径改为你本机的真实路径。
+# - 设置 NEUROMEM_ROOT 为 neuromem 仓库绝对路径。
 # - 如果只验证其中一条链路，建议只打开一个适配器，便于定位问题。
 
 runtime:
@@ -45,7 +45,7 @@ services:
     strategy_adapters:
       - name: "streamfp_selector"
         enabled: false
-        repo_path: "/home/shuhao/streamfp"
+        repo_path: "${NEUROMEM_ROOT}/third_party/streamfp"
         query_text_key: "query"
         entry_text_key: "text"
         threshold: 0.35
@@ -55,7 +55,7 @@ services:
 
       - name: "flowrag_retriever"
         enabled: false
-        repo_path: "/home/shuhao/FlowRAG"
+        repo_path: "${NEUROMEM_ROOT}/third_party/flowrag"
         index_dir: "/absolute/path/to/flowrag/index"
         index_name: "toy"
         query_encoder: "use_request_vector"

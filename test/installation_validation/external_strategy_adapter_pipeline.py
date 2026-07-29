@@ -20,8 +20,13 @@ _project_root = str(Path(__file__).resolve().parents[2])
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
-NEUROMEM_REPO = WORKSPACE_ROOT / "neuromem"
+BENCH_REPO = Path(__file__).resolve().parents[2]
+if BENCH_REPO.parent.name == "third_party":
+    NEUROMEM_REPO = BENCH_REPO.parent.parent
+    WORKSPACE_ROOT = BENCH_REPO.parent
+else:
+    WORKSPACE_ROOT = BENCH_REPO.parent
+    NEUROMEM_REPO = WORKSPACE_ROOT / "neuromem"
 if NEUROMEM_REPO.exists():
     neuromem_repo_str = str(NEUROMEM_REPO)
     if neuromem_repo_str not in sys.path:
@@ -60,7 +65,11 @@ from test.benchmark.test_fifo_locomo_mock import MockLLMGenerator, MockLocomoLoa
 from test.benchmark.test_fifo_locomo_mock import _make_call_service
 
 
-FLOWRAG_REPO = WORKSPACE_ROOT / "FlowRAG"
+FLOWRAG_REPO = (
+    WORKSPACE_ROOT / "flowrag"
+    if (WORKSPACE_ROOT / "flowrag").exists()
+    else WORKSPACE_ROOT / "FlowRAG"
+)
 STREAMFP_REPO = WORKSPACE_ROOT / "streamfp"
 DEFAULT_CONFIG = (
     Path(__file__).resolve().parents[2]
@@ -172,10 +181,12 @@ def _prepare_config(
     for spec in filtered_specs:
         adapter_name = spec.get("name") or spec.get("type")
         if adapter_name == "streamfp_selector":
+            spec["repo_path"] = str(STREAMFP_REPO)
             spec["selector"] = selector
             spec["model"] = model
             spec["examples_builder"] = build_examples
         elif adapter_name == "flowrag_retriever":
+            spec["repo_path"] = str(FLOWRAG_REPO)
             spec["index_dir"] = str(flowrag_index_dir)
 
     return config

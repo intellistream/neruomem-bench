@@ -48,11 +48,11 @@ services:
     # strategy_adapters:
     #   - name: "streamfp_selector"   # 插入前筛选
     #     enabled: true
-    #     repo_path: "/home/shuhao/streamfp"
+    #     repo_path: "${NEUROMEM_ROOT}/third_party/streamfp"
     #     threshold: 0.35
     #   - name: "flowrag_retriever"   # 检索后扩展召回
     #     enabled: true
-    #     repo_path: "/home/shuhao/FlowRAG"
+    #     repo_path: "${NEUROMEM_ROOT}/third_party/flowrag"
     #     index_dir: "/absolute/path/to/flowrag/index"
     #     index_name: "toy"
 

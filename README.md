@@ -172,11 +172,11 @@ services:
     strategy_adapters:
       - name: "streamfp_selector"
         enabled: true
-        repo_path: "/home/shuhao/streamfp"
+        repo_path: "${NEUROMEM_ROOT}/third_party/streamfp"
         threshold: 0.35
       - name: "flowrag_retriever"
         enabled: true
-        repo_path: "/home/shuhao/FlowRAG"
+        repo_path: "${NEUROMEM_ROOT}/third_party/flowrag"
         index_dir: "/absolute/path/to/index"
         index_name: "toy"
         external_top_k: 5
@@ -184,6 +184,8 @@ services:
 
 Notes:
 
+- Set `NEUROMEM_ROOT` to the absolute path of the parent NeuroMem repository
+  before using source-backed adapters.
 - Enable one adapter first when bringing up a new environment; it is easier to isolate dependency or path problems.
 - Repo-backed real runs require the same local dependencies used in the integration tests: `faiss-cpu`, `geomloss`, and `loguru`.
 - `streamfp_selector` is useful for insert-time gating, while `flowrag_retriever` is useful for retrieval-time augmentation. They can be enabled independently.

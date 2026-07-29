@@ -43,13 +43,13 @@ services:
     strategy_adapters:
       - name: "streamfp_selector"
         enabled: true
-        repo_path: "/home/shuhao/streamfp"
+        repo_path: "${NEUROMEM_ROOT}/third_party/streamfp"
         threshold: 0.0
         measure: "cosine"
 
       - name: "flowrag_retriever"
         enabled: true
-        repo_path: "/home/shuhao/FlowRAG"
+        repo_path: "${NEUROMEM_ROOT}/third_party/flowrag"
         index_dir: "__TEMP_FLOWRAG_INDEX_DIR__"
         index_name: "tiny"
         external_top_k: 1
