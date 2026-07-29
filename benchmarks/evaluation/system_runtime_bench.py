@@ -15,11 +15,11 @@ from __future__ import annotations
 
 import argparse
 import copy
+import importlib
 import json
 import math
 import os
 import sys
-import importlib
 import tracemalloc
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -31,11 +31,16 @@ import yaml
 try:
     from sage.neuromem.services.neuromem_service_factory import NeuromemServiceFactory
 except ModuleNotFoundError:
-    candidate_repos = [
-        Path("/home/shuhao/neuromem"),
-        Path(__file__).resolve().parents[3] / "neuromem",
-        Path.cwd().parent / "neuromem",
-    ]
+    benchmark_repo = Path(__file__).resolve().parents[2]
+    source_workspace = (
+        benchmark_repo.parent.parent
+        if benchmark_repo.parent.name == "third_party"
+        else benchmark_repo.parent / "neuromem"
+    )
+    candidate_repos = []
+    if os.environ.get("NEUROMEM_ROOT"):
+        candidate_repos.append(Path(os.environ["NEUROMEM_ROOT"]))
+    candidate_repos.extend([source_workspace, Path.cwd().parent / "neuromem"])
     for candidate_repo in candidate_repos:
         if candidate_repo.exists():
             sys.path.insert(0, str(candidate_repo))
