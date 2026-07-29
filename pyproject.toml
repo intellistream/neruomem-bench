@@ -15,7 +15,7 @@ requires-python = ">=3.11"
 
 dependencies = [
     # NeuroMem core (provides NeuromemServiceFactory + storage backends)
-    "isage-neuromem[full]",
+    "isage-neuromem[benchmark]",
 
     # Sage runtime (provides sage.foundation, sage.runtime for pipelines)
     "isage",

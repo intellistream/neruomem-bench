@@ -86,7 +86,7 @@ setup_env() {
 
     # ---- install runtime dependencies explicitly so validation won't fail later ----
     _install_runtime_package "$env_name" "$log_file" "$sage_root" "isage" "SAGE runtime"
-    _install_runtime_package "$env_name" "$log_file" "$neuromem_root" "isage-neuromem[full]" "NeuroMem"
+    _install_runtime_package "$env_name" "$log_file" "$neuromem_root" "isage-neuromem[benchmark]" "NeuroMem"
 
     # ---- install from pyproject.toml (editable, real-time output + log) ----
     echo "[INFO]  $MSG_INSTALLING" | tee -a "$log_file"

@@ -277,7 +277,7 @@ scripts/
 ## Dependencies
 
 - Python >= 3.11
-- `isage-neuromem[full]` — Sage runtime + NeuromemServiceFactory
+- `isage-neuromem[benchmark]` — NeuroMem plus benchmark and evaluation dependencies
 - `openai` — LLM / Embedding API client
 - `pyyaml` — Config file parsing
 - `datasketch` — LSH data structures
