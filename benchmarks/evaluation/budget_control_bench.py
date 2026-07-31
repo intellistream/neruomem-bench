@@ -120,8 +120,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--operations-per-phase", type=int, default=80)
     parser.add_argument("--latency-slo-ms", type=float, default=24.0)
     parser.add_argument("--state-budget-entries", type=int, default=64)
+    parser.add_argument("--state-budget-bytes", type=int, default=8192)
     parser.add_argument("--requested-top-k", type=int, default=8)
     parser.add_argument("--observation-window", type=int, default=16)
+    parser.add_argument("--overhead-warmup", type=int, default=2000)
+    parser.add_argument("--overhead-batches", type=int, default=200)
+    parser.add_argument("--overhead-batch-size", type=int, default=128)
     parser.add_argument("--output", default="")
     return parser.parse_args()
 
@@ -157,7 +161,9 @@ def _select_top_k(
     requested_top_k: int,
     oracle_top_k: int,
 ) -> int:
-    if policy == "static_conservative":
+    if policy == "static_safe":
+        return min(2, requested_top_k)
+    if policy == "static_intermediate":
         return min(3, requested_top_k)
     if policy in {"static_aggressive", "no_controller"}:
         return requested_top_k
@@ -174,15 +180,24 @@ def _apply_write(
     controller: BudgetController | None,
     retained: deque[EvictionCandidate],
     next_entry_id: str,
+    incoming_size_bytes: int,
     state_budget_entries: int,
+    state_budget_bytes: int,
 ) -> None:
-    candidate = EvictionCandidate(next_entry_id, float(next_entry_id.split("-")[-1]), 128)
+    candidate = EvictionCandidate(
+        next_entry_id,
+        float(next_entry_id.split("-")[-1]),
+        incoming_size_bytes,
+    )
     if policy == "no_controller":
         retained.append(candidate)
         return
     if policy != "online_controller":
         retained.append(candidate)
-        while len(retained) > state_budget_entries:
+        while (
+            len(retained) > state_budget_entries
+            or sum(item.size_bytes for item in retained) > state_budget_bytes
+        ):
             retained.popleft()
         return
     if controller is None:
@@ -190,8 +205,8 @@ def _apply_write(
 
     decision = controller.decide_admission(
         current_entries=len(retained),
-        current_size_bytes=len(retained) * 128,
-        incoming_size_bytes=128,
+        current_size_bytes=sum(item.size_bytes for item in retained),
+        incoming_size_bytes=incoming_size_bytes,
         candidates=list(retained),
     )
     if decision.action == "reject":
@@ -233,6 +248,7 @@ def run_trial(
     requested_top_k: int,
     latency_slo_ms: float,
     state_budget_entries: int,
+    state_budget_bytes: int,
     observation_window: int,
 ) -> dict[str, Any]:
     controller = None
@@ -240,6 +256,7 @@ def run_trial(
         controller = BudgetController(
             ResourceBudget(
                 max_entries=state_budget_entries,
+                max_size_bytes=state_budget_bytes,
                 retrieval_slo_ms=latency_slo_ms,
                 observation_window=observation_window,
             ),
@@ -294,14 +311,22 @@ def run_trial(
 
             if phase.write_every > 0 and (operation_index + 1) % phase.write_every == 0:
                 entry_sequence += 1
+                size_pattern = (64, 192, 512, 96, 320)
+                incoming_size_bytes = size_pattern[(entry_sequence + seed) % len(size_pattern)]
                 _apply_write(
                     policy,
                     controller=controller,
                     retained=retained,
                     next_entry_id=f"entry-{entry_sequence}",
+                    incoming_size_bytes=incoming_size_bytes,
                     state_budget_entries=state_budget_entries,
+                    state_budget_bytes=state_budget_bytes,
                 )
-            state_violations += int(len(retained) > state_budget_entries)
+            retained_size_bytes = sum(item.size_bytes for item in retained)
+            state_violations += int(
+                len(retained) > state_budget_entries
+                or retained_size_bytes > state_budget_bytes
+            )
 
         applied_by_phase[phase.name] = phase_applied
 
@@ -319,6 +344,7 @@ def run_trial(
         "latency_violation_rate": latency_violations / total_operations,
         "state_violation_rate": state_violations / total_operations,
         "retained_entries": len(retained),
+        "retained_size_bytes": sum(item.size_bytes for item in retained),
         "controller_overhead_us": overhead_summary,
         "adaptation_steps": _adaptation_steps(applied_by_phase, oracle_by_phase),
         "oracle_top_k_by_phase": oracle_by_phase,
@@ -355,14 +381,82 @@ def _metric(values: list[float]) -> dict[str, float]:
     return {"mean": _mean(values), "ci95": _ci95(values)}
 
 
+def _measure_controller_overhead(
+    *,
+    latency_slo_ms: float,
+    observation_window: int,
+    warmup: int,
+    batches: int,
+    batch_size: int,
+) -> dict[str, Any]:
+    """Measure the decision/update path separately from the modeled trace."""
+    if warmup < 0 or batches < 1 or batch_size < 1:
+        raise ValueError("overhead measurement sizes must be positive")
+
+    controller = BudgetController(
+        ResourceBudget(
+            retrieval_slo_ms=latency_slo_ms,
+            observation_window=observation_window,
+        )
+    )
+    for _ in range(observation_window):
+        controller.observe_retrieval(duration_ms=20.0, applied_top_k=4)
+
+    original_affinity: set[int] | None = None
+    measurement_cpu: int | None = None
+    if hasattr(os, "sched_getaffinity") and hasattr(os, "sched_setaffinity"):
+        original_affinity = set(os.sched_getaffinity(0))
+        if original_affinity:
+            measurement_cpu = min(original_affinity)
+            os.sched_setaffinity(0, {measurement_cpu})
+
+    def invoke_once() -> None:
+        decision = controller.decide_retrieval(8)
+        controller.observe_retrieval(
+            duration_ms=5.0 * decision.applied_top_k,
+            applied_top_k=decision.applied_top_k,
+        )
+
+    try:
+        for _ in range(warmup):
+            invoke_once()
+        per_operation_us = []
+        for _ in range(batches):
+            started = perf_counter_ns()
+            for _ in range(batch_size):
+                invoke_once()
+            elapsed = perf_counter_ns() - started
+            per_operation_us.append(elapsed / batch_size / 1000.0)
+    finally:
+        if original_affinity is not None:
+            os.sched_setaffinity(0, original_affinity)
+
+    return {
+        "clock": "perf_counter_ns",
+        "measurement_cpu": measurement_cpu,
+        "warmup_operations": warmup,
+        "batches": batches,
+        "operations_per_batch": batch_size,
+        "summary_us_per_decision_update": {
+            key.replace("_ms", "_us"): value
+            for key, value in latency_summary(per_operation_us).items()
+        },
+        "batch_means_us_per_decision_update": per_operation_us,
+    }
+
+
 def run_budget_control_benchmark(
     *,
     seeds: list[int],
     operations_per_phase: int = 80,
     latency_slo_ms: float = 24.0,
     state_budget_entries: int = 64,
+    state_budget_bytes: int = 8192,
     requested_top_k: int = 8,
     observation_window: int = 16,
+    overhead_warmup: int = 2000,
+    overhead_batches: int = 200,
+    overhead_batch_size: int = 128,
     output_path: str | Path | None = None,
 ) -> dict[str, Any]:
     phases = tuple(
@@ -377,7 +471,8 @@ def run_budget_control_benchmark(
     )
     policies = (
         "no_controller",
-        "static_conservative",
+        "static_safe",
+        "static_intermediate",
         "static_aggressive",
         "online_controller",
         "offline_oracle",
@@ -390,6 +485,7 @@ def run_budget_control_benchmark(
             requested_top_k=requested_top_k,
             latency_slo_ms=latency_slo_ms,
             state_budget_entries=state_budget_entries,
+            state_budget_bytes=state_budget_bytes,
             observation_window=observation_window,
         )
         for policy in policies
@@ -418,17 +514,28 @@ def run_budget_control_benchmark(
     report = {
         "benchmark": "controlled_phase_shift",
         "latency_source": "declared deterministic cost trace",
-        "controller_overhead_source": "measured monotonic process clock",
+        "controller_overhead_source": (
+            "single-CPU batched microbenchmark using a monotonic wall clock"
+        ),
         "config": {
             "seeds": seeds,
             "latency_slo_ms": latency_slo_ms,
             "state_budget_entries": state_budget_entries,
+            "state_budget_bytes": state_budget_bytes,
+            "payload_size_pattern_bytes": [64, 192, 512, 96, 320],
             "requested_top_k": requested_top_k,
             "observation_window": observation_window,
             "phases": [asdict(phase) for phase in phases],
         },
         "aggregates": aggregates,
         "trials": trials,
+        "controller_overhead_microbenchmark": _measure_controller_overhead(
+            latency_slo_ms=latency_slo_ms,
+            observation_window=observation_window,
+            warmup=overhead_warmup,
+            batches=overhead_batches,
+            batch_size=overhead_batch_size,
+        ),
         "provenance": _repository_provenance(),
     }
     if output_path:
@@ -444,8 +551,12 @@ def main() -> None:
         operations_per_phase=args.operations_per_phase,
         latency_slo_ms=args.latency_slo_ms,
         state_budget_entries=args.state_budget_entries,
+        state_budget_bytes=args.state_budget_bytes,
         requested_top_k=args.requested_top_k,
         observation_window=args.observation_window,
+        overhead_warmup=args.overhead_warmup,
+        overhead_batches=args.overhead_batches,
+        overhead_batch_size=args.overhead_batch_size,
         output_path=args.output or None,
     )
     print(json.dumps(report["aggregates"], indent=2))
