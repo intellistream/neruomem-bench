@@ -127,6 +127,8 @@ class MemorySink(SinkFunction):
                     "question_text": answer.get("question"),
                     "predicted_answer": answer.get("predicted_answer"),
                 }
+                if answer.get("reference_answer") is not None:
+                    question_data["reference_answer"] = answer["reference_answer"]
                 if "answer" in metadata:
                     question_data["reference_answer"] = metadata["answer"]
                 if "evidence" in metadata:

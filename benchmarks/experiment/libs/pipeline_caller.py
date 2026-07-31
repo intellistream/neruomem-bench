@@ -11,6 +11,54 @@ from benchmarks.experiment.utils import (
     calculate_test_thresholds,
 )
 
+_INFERENCE_METADATA_KEYS = ("question_id", "id", "sample_id")
+
+
+def inference_question_metadata(
+    question: dict,
+    *,
+    fallback_index: int,
+) -> dict[str, object]:
+    """Return metadata that is safe to expose to retrieval and generation.
+
+    Dataset rows commonly colocate questions with gold answers and supporting
+    evidence.  Passing that row through the inference pipeline makes the gold
+    visible to every pre/post-retrieval action even when the final evaluator
+    itself is clean.  Only a stable, non-semantic identifier crosses this
+    boundary; references remain in the caller and are attached after inference.
+    """
+
+    for key in _INFERENCE_METADATA_KEYS:
+        value = question.get(key)
+        if value is not None and str(value).strip():
+            return {"question_id": str(value)}
+    return {"question_id": f"question-{fallback_index:04d}"}
+
+
+def build_inference_question_payload(
+    *,
+    task_id: str,
+    session_id: int,
+    dialog_id: int,
+    dialogs: list[dict],
+    question: dict,
+    question_index: int,
+) -> dict[str, object]:
+    """Build the complete payload visible to retrieval and generation."""
+
+    return {
+        "task_id": task_id,
+        "session_id": session_id,
+        "dialog_id": dialog_id,
+        "dialogs": dialogs,
+        "question": question["question"],
+        "question_idx": question_index,
+        "question_metadata": inference_question_metadata(
+            question,
+            fallback_index=question_index,
+        ),
+    }
+
 
 class PipelineCaller(MapFunction):
     """主 Pipeline 的核心 Map 算子
@@ -256,15 +304,14 @@ class PipelineCaller(MapFunction):
         for q_idx, qa in enumerate(current_questions):
             question = qa["question"]
 
-            test_data = {
-                "task_id": task_id,
-                "session_id": session_id,
-                "dialog_id": dialog_id,
-                "dialogs": dialogs,
-                "question": question,
-                "question_idx": q_idx + 1,
-                "question_metadata": qa,
-            }
+            test_data = build_inference_question_payload(
+                task_id=task_id,
+                session_id=session_id,
+                dialog_id=dialog_id,
+                dialogs=dialogs,
+                question=qa,
+                question_index=q_idx + 1,
+            )
 
             result = self.call_service(
                 "memory_test_service",
@@ -284,7 +331,16 @@ class PipelineCaller(MapFunction):
                     "question_index": q_idx + 1,
                     "question": question,
                     "predicted_answer": result["answer"],
-                    "metadata": result.get("question_metadata", qa),
+                    "metadata": result.get(
+                        "question_metadata",
+                        inference_question_metadata(
+                            qa,
+                            fallback_index=q_idx + 1,
+                        ),
+                    ),
+                    # Added only after the inference service returns.  Retrieval,
+                    # prompt construction, and generation cannot observe it.
+                    "reference_answer": qa.get("answer"),
                 }
                 test_answers.append(answer_record)
 
