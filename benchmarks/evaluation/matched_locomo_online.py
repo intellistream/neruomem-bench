@@ -35,8 +35,7 @@ POLICY_NAMES = ("safe_static_k2", "adaptive_budget")
 
 def _canonical_bytes(value: Any) -> bytes:
     return (
-        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        + "\n"
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
     ).encode()
 
 
@@ -71,14 +70,60 @@ def _reject_answer_material(value: Any, path: str = "$") -> None:
 
 def _task_from_dataset(dataset_path: Path, task_id: str) -> dict[str, Any]:
     raw = json.loads(dataset_path.read_text(encoding="utf-8"))
-    matches = [
-        row
-        for row in raw
-        if str(row.get("task_id") or row.get("sample_id")) == task_id
-    ]
+    matches = [row for row in raw if str(row.get("task_id") or row.get("sample_id")) == task_id]
     if len(matches) != 1:
         raise ValueError(f"expected exactly one task {task_id}, found {len(matches)}")
     return matches[0]
+
+
+def _normalise_task(task: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return the public task without dropping LoCoMo's temporal context."""
+    if "conversation" in task and "qa" in task:
+        conversation = task["conversation"]
+        session_numbers = sorted(
+            int(match.group(1))
+            for key in conversation
+            if (match := re.fullmatch(r"session_(\d+)", key))
+        )
+        messages = []
+        for session_number in session_numbers:
+            session_key = f"session_{session_number}"
+            session_datetime = str(conversation.get(f"{session_key}_date_time", ""))
+            for dialog_index, message in enumerate(conversation[session_key]):
+                messages.append(
+                    {
+                        "message_id": str(
+                            message.get("dia_id")
+                            or f"s{session_number - 1:02d}-m{dialog_index:04d}"
+                        ),
+                        "session_id": session_number - 1,
+                        "dialog_id": dialog_index,
+                        "session_datetime": session_datetime,
+                        "speaker": str(message.get("speaker", "Unknown")),
+                        "text": str(message["text"]),
+                        "visual_context": str(message.get("blip_caption", "")),
+                    }
+                )
+        return messages, list(task["qa"])
+
+    messages = []
+    for session in task["sessions"]:
+        session_id = int(session["session_id"])
+        for dialog_id, message in enumerate(session["messages"]):
+            messages.append(
+                {
+                    "message_id": str(
+                        message.get("dia_id") or f"s{session_id:02d}-m{dialog_id:04d}"
+                    ),
+                    "session_id": session_id,
+                    "dialog_id": dialog_id,
+                    "session_datetime": str(session.get("date_time", "")),
+                    "speaker": str(message.get("speaker", "Unknown")),
+                    "text": str(message["text"]),
+                    "visual_context": str(message.get("blip_caption", "")),
+                }
+            )
+    return messages, list(task["questions"])
 
 
 def freeze_inputs(
@@ -92,23 +137,18 @@ def freeze_inputs(
         raise ValueError("dataset SHA256 does not match the frozen protocol")
     task = _task_from_dataset(dataset_path, protocol["task_id"])
 
-    messages = []
-    for session in task["sessions"]:
-        session_id = int(session["session_id"])
-        for dialog_id, message in enumerate(session["messages"]):
-            messages.append(
-                {
-                    "message_id": f"s{session_id:02d}-m{dialog_id:04d}",
-                    "session_id": session_id,
-                    "dialog_id": dialog_id,
-                    "speaker": str(message.get("speaker", "Unknown")),
-                    "text": str(message["text"]),
-                }
-            )
+    messages, raw_questions = _normalise_task(task)
 
     questions = []
     answer_rows = []
-    for index, question in enumerate(task["questions"], 1):
+    included_categories = set(protocol.get("scoring", {}).get("included_categories", []))
+    if included_categories:
+        raw_questions = [
+            question
+            for question in raw_questions
+            if question.get("category") in included_categories
+        ]
+    for index, question in enumerate(raw_questions, 1):
         question_id = f"{protocol['task_id']}-q{index:04d}"
         questions.append(
             {
@@ -216,6 +256,8 @@ def run_online(
     output_dir: Path,
 ) -> dict[str, Any]:
     protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
+    if model != protocol["generation"]["model"]:
+        raise ValueError("served model does not match the frozen protocol")
     if _sha256_file(workload_path) != workload_sha256:
         raise ValueError("workload SHA256 mismatch")
     workload = json.loads(workload_path.read_text(encoding="utf-8"))
@@ -232,7 +274,13 @@ def run_online(
     )
     services = {policy: _create_service(protocol, policy) for policy in POLICY_NAMES}
     for message in workload["messages"]:
-        text = f"{message['speaker']}: {message['text']}"
+        parts = []
+        if message.get("session_datetime"):
+            parts.append(f"Session time: {message['session_datetime']}")
+        parts.append(f"{message['speaker']}: {message['text']}")
+        if message.get("visual_context"):
+            parts.append(f"Visual context: {message['visual_context']}")
+        text = "\n".join(parts)
         metadata = {
             "message_id": message["message_id"],
             "session_id": message["session_id"],
@@ -327,8 +375,7 @@ def run_online(
         "finished_unix_s": time.time(),
         "records": records,
         "policy_snapshots": {
-            policy: services[policy].budget_controller.snapshot()
-            for policy in POLICY_NAMES
+            policy: services[policy].budget_controller.snapshot() for policy in POLICY_NAMES
         },
     }
     prediction_path = output_dir / "predictions.json"
@@ -400,11 +447,7 @@ def score_predictions(
     answer_key = json.loads(answer_key_path.read_text(encoding="utf-8"))
     answers = {row["question_id"]: row for row in answer_key["answers"]}
     records = predictions["records"]
-    expected_keys = {
-        (question_id, policy)
-        for question_id in answers
-        for policy in POLICY_NAMES
-    }
+    expected_keys = {(question_id, policy) for question_id in answers for policy in POLICY_NAMES}
     actual_keys = {(row["question_id"], row["policy"]) for row in records}
     if actual_keys != expected_keys or len(records) != len(expected_keys):
         raise ValueError("prediction matrix does not exactly match the answer key")

@@ -1,0 +1,90 @@
+{
+  "schema_version": "neuromem-matched-locomo-protocol-v2",
+  "evidence_label": "real-online pilot",
+  "claim_boundary": "Single-task public LoCoMo pilot over ordinary QA categories 1--4; not a full LoCoMo result, not a category-5 adversarial result, and not production evidence.",
+  "supersedes_invalid_protocol": "matched_locomo_conv30_pilot_v1.json",
+  "corrections_frozen_before_execution": [
+    "Read the official public release directly so session timestamps, speaker identity, dialogue IDs, and visual captions are not discarded.",
+    "Exclude category-5 adversarial questions rather than applying task-specific answer rules.",
+    "Use a capable local instruction model instead of the 0.6B diagnostic model.",
+    "Hold the complete 369-message task under the same finite state budget for both policies."
+  ],
+  "dataset": {
+    "name": "LoCoMo public release",
+    "path": "benchmarks/experiment/data/locomo/locomo10_official.json",
+    "sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+    "source_url": "https://github.com/snap-research/locomo",
+    "license": "Creative Commons Attribution-NonCommercial 4.0 International",
+    "license_url": "https://github.com/snap-research/locomo/blob/main/LICENSE.txt",
+    "use": "non-commercial academic evaluation with attribution"
+  },
+  "task_id": "conv-30",
+  "history_checkpoint": "all 369 messages inserted before the first query",
+  "request_orders": [
+    [
+      "safe_static_k2",
+      "adaptive_budget"
+    ],
+    [
+      "adaptive_budget",
+      "safe_static_k2"
+    ]
+  ],
+  "policies": {
+    "safe_static_k2": {
+      "requested_top_k": 2,
+      "description": "Maximum static width that is safe in the separate declared phase-shift cost trace."
+    },
+    "adaptive_budget": {
+      "requested_top_k": 8,
+      "description": "Online p95 unit-cost controller under the same state budget."
+    }
+  },
+  "memory": {
+    "common": {
+      "feature_dim": 128,
+      "learning_rate": 0.1,
+      "replay_buffer_size": 128,
+      "replay_batch_size": 8,
+      "retrieval_score_gap_margin": 0.0,
+      "query_overlap_bias": 0.15,
+      "query_overlap_min_hits": 2,
+      "query_overlap_min_ratio": 0.25,
+      "query_overlap_rerank_factor": 4,
+      "query_snippet_max_chars": 120,
+      "telemetry_limit": 4096
+    },
+    "budget": {
+      "max_entries": 512,
+      "max_size_bytes": 1048576,
+      "min_top_k": 1,
+      "observation_window": 16,
+      "overflow_policy": "reject"
+    },
+    "adaptive_retrieval_slo_ms": 24.0
+  },
+  "generation": {
+    "model": "Qwen2.5-7B-Instruct",
+    "temperature": 0.0,
+    "seed": 42,
+    "max_tokens": 64,
+    "request_timeout_s": 120.0,
+    "automatic_retries": 0,
+    "enable_thinking": false,
+    "prompt_template": "Answer the question concisely using only the retrieved conversation context. Resolve relative dates using the session time shown with each message. If the answer is not in the context, respond exactly with \"Not mentioned in the conversation\".\\n\\nRetrieved context:\\n{context}\\n\\nQuestion: {question}\\nAnswer:"
+  },
+  "scoring": {
+    "included_categories": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "metrics": [
+      "normalized_exact_match",
+      "whitespace_token_f1"
+    ],
+    "paired_by": "question_id",
+    "task_specific_rules": false
+  }
+}

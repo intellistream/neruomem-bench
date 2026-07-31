@@ -29,12 +29,8 @@ def test_inference_metadata_is_invariant_to_gold_and_evidence():
         "answer": "SECRET-CHANGED-GOLD",
         "evidence": ["SECRET-CHANGED-EVIDENCE"],
     }
-    assert inference_question_metadata(base, fallback_index=7) == {
-        "question_id": "q-7"
-    }
-    assert inference_question_metadata(mutated, fallback_index=7) == {
-        "question_id": "q-7"
-    }
+    assert inference_question_metadata(base, fallback_index=7) == {"question_id": "q-7"}
+    assert inference_question_metadata(mutated, fallback_index=7) == {"question_id": "q-7"}
     common = {
         "task_id": "conv-x",
         "session_id": 2,
@@ -94,18 +90,81 @@ def test_freeze_keeps_answers_out_of_execution_workload(tmp_path: Path):
         dataset_path=dataset_path,
         output_dir=tmp_path / "frozen",
     )
-    workload = json.loads(
-        (tmp_path / "frozen" / "workload.json").read_text(encoding="utf-8")
-    )
-    answer_key = json.loads(
-        (tmp_path / "frozen" / "answer_key.json").read_text(encoding="utf-8")
-    )
+    workload = json.loads((tmp_path / "frozen" / "workload.json").read_text(encoding="utf-8"))
+    answer_key = json.loads((tmp_path / "frozen" / "answer_key.json").read_text(encoding="utf-8"))
     _reject_answer_material(workload)
     assert "secret-azure-reference" not in json.dumps(workload)
-    assert answer_key["answers"][0]["reference_answer"] == (
-        "secret-azure-reference"
-    )
+    assert answer_key["answers"][0]["reference_answer"] == ("secret-azure-reference")
     assert manifest["answer_isolated"] is True
+
+
+def test_official_freeze_preserves_time_speaker_and_visual_context(tmp_path: Path):
+    dataset = [
+        {
+            "sample_id": "conv-official",
+            "conversation": {
+                "speaker_a": "A",
+                "speaker_b": "B",
+                "session_1_date_time": "4:04 pm on 20 January, 2023",
+                "session_1": [
+                    {
+                        "speaker": "A",
+                        "dia_id": "D1:1",
+                        "text": "I arrived yesterday.",
+                        "blip_caption": "a red train",
+                    }
+                ],
+            },
+            "qa": [
+                {
+                    "question": "When?",
+                    "answer": "19 January, 2023",
+                    "category": 2,
+                    "evidence": ["D1:1"],
+                },
+                {
+                    "question": "A trap?",
+                    "category": 5,
+                    "adversarial_answer": "tomorrow",
+                },
+            ],
+        }
+    ]
+    dataset_path = tmp_path / "official.json"
+    dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
+    import hashlib
+
+    protocol = {
+        "dataset": {
+            "name": "test",
+            "sha256": hashlib.sha256(dataset_path.read_bytes()).hexdigest(),
+        },
+        "task_id": "conv-official",
+        "scoring": {"included_categories": [1, 2, 3, 4]},
+    }
+    protocol_path = tmp_path / "protocol.json"
+    protocol_path.write_text(json.dumps(protocol), encoding="utf-8")
+    manifest = freeze_inputs(
+        protocol_path=protocol_path,
+        dataset_path=dataset_path,
+        output_dir=tmp_path / "frozen",
+    )
+    workload = json.loads((tmp_path / "frozen" / "workload.json").read_text(encoding="utf-8"))
+    assert manifest["question_count"] == 1
+    assert workload["messages"] == [
+        {
+            "message_id": "D1:1",
+            "session_id": 0,
+            "dialog_id": 0,
+            "session_datetime": "4:04 pm on 20 January, 2023",
+            "speaker": "A",
+            "text": "I arrived yesterday.",
+            "visual_context": "a red train",
+        }
+    ]
+    assert workload["questions"][0]["question"] == "When?"
+    assert "evidence" not in json.dumps(workload)
+    assert "adversarial_answer" not in json.dumps(workload)
 
 
 def test_scorer_requires_exact_paired_matrix_and_has_no_answer_rules(tmp_path: Path):
@@ -138,6 +197,4 @@ def test_scorer_requires_exact_paired_matrix_and_has_no_answer_rules(tmp_path: P
     )
     assert report["aggregates"]["safe_static_k2"]["exact_match"] == 1.0
     assert report["aggregates"]["adaptive_budget"]["token_f1"] == 1.0
-    assert report["scorer"] == (
-        "normalized exact match and whitespace-token F1; no task rules"
-    )
+    assert report["scorer"] == ("normalized exact match and whitespace-token F1; no task rules")
